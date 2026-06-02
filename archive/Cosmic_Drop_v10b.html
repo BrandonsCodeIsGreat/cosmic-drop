@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<title>Cosmic Drop</title>
+<title>Cosmic Drop v9</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
 <!-- Firebase SDK — powers the shared leaderboard -->
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -118,10 +118,6 @@ html,body{height:100%;overflow:hidden;background:var(--bg);font-family:'Fredoka'
 @keyframes fadeIn{from{opacity:0}to{opacity:1}}
 #gameover h1{color:#fff;font-size:42px;font-weight:700;text-shadow:0 0 30px rgba(255,77,109,.8);}
 #gameover .final-score{color:var(--accent);font-family:'Space Mono',monospace;font-size:28px;}
-.share-score-btn{padding:10px 28px;font-family:'Fredoka',sans-serif;font-size:16px;font-weight:600;
-  color:var(--accent);background:transparent;border:2px solid var(--accent);border-radius:40px;
-  cursor:pointer;transition:background .2s,color .2s;letter-spacing:1px;}
-.share-score-btn:hover{background:var(--accent);color:#0d0d1a;}
 .game-btn{margin-top:10px;padding:16px 44px;font-family:'Fredoka',sans-serif;font-size:20px;
   font-weight:600;color:#fff;background:var(--btn-grad);
   border:none;border-radius:40px;box-shadow:0 8px 24px rgba(var(--primary-rgb),.5);
@@ -482,7 +478,6 @@ html,body{height:100%;overflow:hidden;background:var(--bg);font-family:'Fredoka'
     <h1>GAME OVER</h1>
     <div class="final-score">Score: <span id="final-score">0</span></div>
     <button id="restart-btn" class="game-btn">PLAY AGAIN</button>
-    <button id="share-btn" class="share-score-btn">&#128228; Share Score</button>
     <button id="menu-btn">&#8592; Main Menu</button>
   </div>
 </div>
@@ -1946,54 +1941,6 @@ function showGameOver(){
   document.getElementById('final-score').textContent=score;
   document.getElementById('gameover').classList.add('show');
 }
-function _roundRect(cx,x,y,w,h,r){
-  cx.beginPath();cx.moveTo(x+r,y);cx.lineTo(x+w-r,y);cx.arcTo(x+w,y,x+w,y+r,r);
-  cx.lineTo(x+w,y+h-r);cx.arcTo(x+w,y+h,x+w-r,y+h,r);cx.lineTo(x+r,y+h);
-  cx.arcTo(x,y+h,x,y+h-r,r);cx.lineTo(x,y+r);cx.arcTo(x,y,x+r,y,r);cx.closePath();
-}
-function shareScoreCard(){
-  const PAD=20,HEADER=90,FOOTER=48;
-  const cw=W+PAD*2, ch=H+HEADER+FOOTER;
-  const card=document.createElement('canvas');
-  card.width=cw; card.height=ch;
-  const cx=card.getContext('2d');
-  // background
-  cx.fillStyle='#0a0a1a'; cx.fillRect(0,0,cw,ch);
-  // deterministic stars
-  const rng=n=>{const s=Math.sin(n+1)*43758.5453;return s-Math.floor(s);};
-  for(let i=0;i<55;i++){
-    cx.beginPath();cx.arc(rng(i*3)*cw,rng(i*3+1)*ch,rng(i*3+2)*1.4+0.3,0,Math.PI*2);
-    cx.fillStyle=`rgba(255,255,255,${(0.3+rng(i)*0.55).toFixed(2)})`;cx.fill();
-  }
-  // title
-  cx.textAlign='center';
-  cx.fillStyle='#ffffff';cx.font='bold 30px Fredoka,sans-serif';
-  cx.shadowColor='rgba(167,139,250,0.9)';cx.shadowBlur=18;
-  cx.fillText('COSMIC DROP',cw/2,PAD+34);cx.shadowBlur=0;
-  // score
-  cx.fillStyle='#a78bfa';cx.font='bold 21px "Space Mono",monospace';
-  cx.fillText('Score: '+score.toLocaleString(),cw/2,PAD+64);
-  // board snapshot with rounded clip
-  cx.save();_roundRect(cx,PAD,HEADER,W,H,12);cx.clip();
-  cx.drawImage(gameCanvas,PAD,HEADER,W,H);cx.restore();
-  // board border
-  cx.strokeStyle='rgba(167,139,250,0.45)';cx.lineWidth=2;
-  _roundRect(cx,PAD,HEADER,W,H,12);cx.stroke();
-  // url footer
-  cx.fillStyle='rgba(255,255,255,0.4)';cx.font='12px "Space Mono",monospace';
-  cx.fillText('cosmicdrop.netlify.app',cw/2,ch-14);
-  // share or download
-  card.toBlob(blob=>{
-    const file=new File([blob],'cosmic-drop-score.png',{type:'image/png'});
-    if(navigator.canShare&&navigator.canShare({files:[file]})){
-      navigator.share({title:'Cosmic Drop',text:'I scored '+score.toLocaleString()+' on Cosmic Drop!',files:[file]}).catch(()=>{});
-    } else {
-      const a=document.createElement('a');
-      a.href=URL.createObjectURL(blob);a.download='cosmic-drop-score.png';a.click();
-      setTimeout(()=>URL.revokeObjectURL(a.href),1000);
-    }
-  },'image/png');
-}
 function showNameEntry(){
   document.getElementById('ne-score').textContent=score.toLocaleString();
   const inp=document.getElementById('name-input');inp.value='';
@@ -2297,7 +2244,6 @@ document.getElementById('start-btn').addEventListener('click',startGame);
 document.getElementById('quake-btn').addEventListener('click',activateQuake);
 document.getElementById('menu-btn').addEventListener('click',returnToMenu);
 document.getElementById('restart-btn').addEventListener('click',restartGame);
-document.getElementById('share-btn').addEventListener('click',shareScoreCard);
 
 // ── INIT ──────────────────────────────────────────────────
 loadScores();
