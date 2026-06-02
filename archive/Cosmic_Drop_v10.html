@@ -758,11 +758,6 @@ let activePowerup=null;
 
 // ── COMET STATE ────────────────────────────────────────────
 const COMET_CD_BASE = 7000;
-// If a fired comet leaves the screen this fast WITHOUT hitting a planet, it
-// was a dud (e.g. slingshot released low → launched straight off the top) and
-// we refund the powerup charge. Real shots either hit something or stay on
-// screen longer than this. See fireComet() and the comet-removal block.
-const COMET_DUD_MS = 150;
 // Rather than scattering a pile of `let cometXxx` variables at the top level,
 // we group everything that belongs to the comet feature in one object.
 // Benefits: you can see at a glance what state the system tracks, and
@@ -1081,10 +1076,6 @@ function setupGame(){
   Events.on(engine,'collisionStart',e=>{
     for(const pair of e.pairs){
       const a=pair.bodyA,b=pair.bodyB;
-      // Mark a comet as having done its job the moment it touches a planet, so
-      // it won't be refunded as a dud when it later leaves the screen.
-      if(a.isComet&&b.tier!==undefined)a.cometHit=true;
-      if(b.isComet&&a.tier!==undefined)b.cometHit=true;
       if(a.tier!==undefined&&b.tier!==undefined&&a.tier===b.tier&&
          !a.merging&&!b.merging&&a!==currentBody&&b!==currentBody)
         mergePlanets(a,b);
@@ -1166,10 +1157,6 @@ function drawLoop(){
       drawComet(gameCtx,b.position.x,b.position.y,b.circleRadius,b.velocity.x,b.velocity.y);
       // Remove comet once it leaves the canvas
       if(b.position.x<-50||b.position.x>W+50||b.position.y>H+50||b.position.y<-50){
-        // Dud: left the screen almost immediately without hitting a planet
-        // (classic "released the slingshot too low → fired straight off the
-        // top"). Give the player their charge back.
-        if(!b.cometHit&&Date.now()-b.cometFiredAt<COMET_DUD_MS)refundCompetitionCharge();
         Composite.remove(engine.world,b);
       }
       continue;
@@ -1351,7 +1338,6 @@ function fireComet(startX,startY,endX,endY){
     restitution:0.6,friction:0.1,frictionAir:0,density:0.05,
   });
   b.isComet=true;b.circleRadius=r;
-  b.cometFiredAt=Date.now();b.cometHit=false; // for dud-refund detection
   Composite.add(engine.world,b);
   Body.setVelocity(b,{x:vx,y:vy});
   comet.cd=COMET_CD();
@@ -1544,13 +1530,6 @@ function useCompetitionCharge(){
   updateChargeDisplay();
   if(powerupUsesLeft<=0)clearSelectMode();
   return true;
-}
-// Give back one charge (competition mode only), capped at the per-game max.
-// Used when a powerup is consumed but produces no effect — e.g. a comet that
-// flies straight off the screen without hitting anything.
-function refundCompetitionCharge(){
-  if(gameSettings.mode!=='competition')return;
-  if(powerupUsesLeft<COMPETITION_USES){powerupUsesLeft++;updateChargeDisplay();}
 }
 function updateChargeDisplay(){
   const el=document.getElementById('charge-pips');if(!el)return;
@@ -1838,23 +1817,6 @@ const scoresMap={small:[],medium:[],large:[]};
 let currentLbTab='medium'; // which tab is visible in the leaderboard overlay
 function getSizeKey(){return gameSettings.sizeScale<=0.65?'small':gameSettings.sizeScale>=1.0?'large':'medium';}
 
-// Fetch one size's scores from Firebase, sort high→low, keep the top 10, and
-// store them in scoresMap[k]; then run onDone(). This logic used to be copy-
-// pasted in loadScores / addScore / openLeaderboard — and the original
-// leaderboard bug (forEach stopping after one row) had to be fixed in all three
-// copies. Keeping it in one place means there's only ever one copy to get right.
-function fetchTopScores(k,onDone){
-  if(!firebaseDb)return;
-  firebaseDb.ref('scores/'+k).once('value').then(snap=>{
-    const list=[];
-    snap.forEach(c=>{list.push(c.val());});
-    list.sort((a,b)=>b.score-a.score);
-    if(list.length>10)list.length=10;
-    if(list.length>0)scoresMap[k]=list;
-    if(onDone)onDone();
-  }).catch(e=>console.warn('Firebase scores fetch failed:',e));
-}
-
 function loadScores(){
   // Load all three sizes from localStorage immediately
   ['small','medium','large'].forEach(k=>{
@@ -1863,12 +1825,18 @@ function loadScores(){
   });
   refreshBestDisplay();renderLeaderboard();
   // Then pull all three from Firebase
-  ['small','medium','large'].forEach(k=>{
-    fetchTopScores(k,()=>{
-      if(k===getSizeKey())refreshBestDisplay();
-      renderLeaderboard();
+  if(firebaseDb){
+    ['small','medium','large'].forEach(k=>{
+      firebaseDb.ref('scores/'+k).once('value',snap=>{
+        const list=[];snap.forEach(c=>{list.push(c.val());});
+        list.sort((a,b)=>b.score-a.score);
+        if(list.length>10)list.length=10;
+        if(list.length>0)scoresMap[k]=list;
+        if(k===getSizeKey())refreshBestDisplay();
+        renderLeaderboard();
+      }).catch(e=>console.warn('Firebase load failed:',e));
     });
-  });
+  }
 }
 function saveScores(k){
   try{localStorage.setItem(SCORES_KEYS[k],JSON.stringify(scoresMap[k]));}catch(e){}
@@ -1886,8 +1854,14 @@ function addScore(name,s){
   saveScores(k);refreshBestDisplay();renderLeaderboard();
   if(firebaseDb){
     firebaseDb.ref('scores/'+k).push(entry)
-      .then(()=>fetchTopScores(k,()=>{saveScores(k);refreshBestDisplay();renderLeaderboard();}))
-      .catch(e=>console.warn('Firebase save failed:',e));
+      .then(()=>firebaseDb.ref('scores/'+k).once('value'))
+      .then(snap=>{
+        const list=[];snap.forEach(c=>{list.push(c.val());});
+        list.sort((a,b)=>b.score-a.score);
+        if(list.length>10)list.length=10;
+        if(list.length>0)scoresMap[k]=list;
+        saveScores(k);refreshBestDisplay();renderLeaderboard();
+      }).catch(e=>console.warn('Firebase save failed:',e));
   }
 }
 function refreshBestDisplay(){
@@ -1932,9 +1906,17 @@ function openLeaderboard(highlightScore){
   renderLeaderboard(highlightScore);
   document.getElementById('leaderboard').classList.add('show');
   // Refresh all three tabs from Firebase
-  ['small','medium','large'].forEach(k=>{
-    fetchTopScores(k,()=>renderLeaderboard(highlightScore));
-  });
+  if(firebaseDb){
+    ['small','medium','large'].forEach(k=>{
+      firebaseDb.ref('scores/'+k).once('value',snap=>{
+        const list=[];snap.forEach(c=>{list.push(c.val());});
+        list.sort((a,b)=>b.score-a.score);
+        if(list.length>10)list.length=10;
+        if(list.length>0)scoresMap[k]=list;
+        renderLeaderboard(highlightScore);
+      }).catch(e=>console.warn('Firebase refresh failed:',e));
+    });
+  }
 }
 function closeLeaderboard(){document.getElementById('leaderboard').classList.remove('show');}
 function showGameOver(){
