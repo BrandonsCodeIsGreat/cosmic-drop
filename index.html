@@ -1984,7 +1984,7 @@ function shareScoreCard(){
   card.toBlob(blob=>{
     const file=new File([blob],'cosmic-drop-score.png',{type:'image/png'});
     if(navigator.canShare&&navigator.canShare({files:[file]})){
-      navigator.share({title:'Cosmic Drop',text:'I scored '+score.toLocaleString()+' on Cosmic Drop!\nhttps://brandonscodeisgreat.github.io/cosmic-drop',files:[file]}).catch(()=>{});
+      navigator.share({title:'Cosmic Drop',text:'I scored '+score.toLocaleString()+' on Cosmic Drop!',files:[file]}).catch(()=>{});
     } else {
       const a=document.createElement('a');
       a.href=URL.createObjectURL(blob);a.download='cosmic-drop-score.png';a.click();
