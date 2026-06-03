@@ -3,7 +3,7 @@
 A single self-contained HTML game (Matter.js physics + Firebase leaderboard). No build step.
 
 ## ⛔ CRITICAL RULE — DO NOT READ THE AUDIO DATA
-The file ends with two huge base64 WAV blobs (`DROP_B64`, `MERGE_B64`) under the
+Files before v11 end with two huge base64 WAV blobs (`DROP_B64`, `MERGE_B64`) under the
 `// ── AUDIO DATA ──` marker comment. These consume enormous token budgets and
 **never need to be read or edited.**
 
@@ -15,7 +15,7 @@ The file ends with two huge base64 WAV blobs (`DROP_B64`, `MERGE_B64`) under the
 All editable logic lives **above** that marker.
 
 ## File
-- `cosmic-drop.html` — the canonical game file (was `Cosmic_Drop_v10.html`, branded "Galaxy Edition").
+- `index.html` — the canonical game file (was `Cosmic_Drop_v10.html`, branded "Galaxy Edition").
 
 ## Architecture
 Single HTML file. CDN deps only: Matter.js (physics), Firebase compat SDK v10.12.0 (leaderboard).
