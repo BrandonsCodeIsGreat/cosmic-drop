@@ -1,12 +1,26 @@
 # Cosmic Drop 🪐
 
-A self-contained planet-merging physics game. Single HTML file, no build step.
+A planet-merging physics game. No build step.
 
-## Run
-Open `cosmic-drop.html` in a browser, or serve locally:
+**Live:** https://cosmicdrop.netlify.app
+
+## Run locally
+
+Requires a local server — audio uses `fetch()` and won't work over `file://`.
 
 ```bash
-python3 -m http.server 8000   # then visit http://localhost:8000/cosmic-drop.html
+python3 -m http.server 8000   # then visit http://localhost:8000
+```
+
+## Structure
+
+```
+index.html      — game (HTML + CSS + JS, ~113KB)
+sounds/
+  drop.mp3      — drop sound
+  merge.mp3     — merge sound
+favicon.png     — Neptune planet icon (64×64)
+netlify.toml    — cache headers for Netlify
 ```
 
 ## Dependencies (CDN, no install)
@@ -14,7 +28,6 @@ python3 -m http.server 8000   # then visit http://localhost:8000/cosmic-drop.htm
 - Firebase compat SDK 10.12.0 — shared leaderboard
 
 ## Editing
-See `CLAUDE.md` for full architecture, game modes, scoring, and conventions.
+See `.claude/CLAUDE.md` for full architecture, game modes, scoring, and conventions.
 
-**Note:** the file ends with two large base64 audio blobs under the `AUDIO DATA`
-marker. Don't read or edit them — all logic lives above that line.
+Versioning workflow: write changes to `archive/Cosmic_Drop_vN.html` first, then copy to `index.html`.
