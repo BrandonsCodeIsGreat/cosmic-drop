@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<!--
+  Cosmic Drop — Device Measure (diagnostic tool, NOT part of the game)
+  ===================================================================
+  Standalone page used to capture a phone's real playfield size. It clones
+  ONLY the game's vertical layout (topbar + flex:1 holder + bottom bar) and
+  runs the game's own formula — W = min(holderWidth-16, 460), H = holderHeight-16
+  — so the "Game field" number it reports is exactly the playfield the game
+  would build on that device.
+
+  Why it exists: the competitive field used to scale with screen size, so taller
+  phones could stack more planets. We froze a single shared logical field
+  (LOGICAL_W=344, LOGICAL_H=570) measured on a Galaxy Z Flip 5 using this tool.
+  See index.html (search "Fixed logical playfield") for the actual fix.
+
+  To re-measure a device: open this page on the phone the SAME way you launch the
+  game (same browser / home-screen mode), hold it in playing orientation, and
+  read the gold "Game field (W × H)" value, or tap "Copy all values".
+
+  Archived 2026-06-08 once the fix shipped. Safe to delete; kept for future
+  re-measuring if we ever want to re-baseline the field.
+-->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<!-- Identical viewport rules to the game so the layout math matches -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Cosmic Drop — Device Measure</title>
+<style>:root{
+  --accent:#9b8cff;     --accent-rgb:155,140,255;
+  --primary-rgb:123,92,255;
+  --gold:#ffd700;       --dim:#5a4a88;
+  --bg:#0a0a1f;
+}
+@import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600;700&family=Space+Mono:wght@700&display=swap');
+/* ── The following rules are copied verbatim from index.html so that the
+      #canvas-holder ends up exactly the same height it would in the game. ── */
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+html,body{height:100%;overflow:hidden;background:var(--bg);font-family:'Fredoka',sans-serif;
+  user-select:none;-webkit-user-select:none;touch-action:none;color:#fff;}
+#space{position:fixed;inset:0;background:
+  radial-gradient(ellipse at 20% 10%,rgba(120,80,220,.25),transparent 50%),
+  radial-gradient(ellipse at 80% 80%,rgba(40,120,200,.25),transparent 50%),
+  linear-gradient(180deg,#0d0d2b 0%,#14082e 60%,#1a0a2e 100%);}
+#game-wrap{position:relative;height:100%;display:flex;flex-direction:column;
+  align-items:center;max-width:480px;margin:0 auto;}
+/* topbar */
+#topbar{width:100%;display:flex;justify-content:space-between;align-items:center;
+  padding:14px 18px 8px;z-index:10;}
+.score-box{color:#fff;}
+.score-label{font-size:12px;letter-spacing:2px;text-transform:uppercase;color:var(--accent);font-weight:500;}
+.score-value{font-family:'Space Mono',monospace;font-size:34px;font-weight:700;line-height:1;}
+.best-score{font-size:11px;letter-spacing:1.5px;color:var(--dim);text-transform:uppercase;}
+.next-box{display:flex;flex-direction:column;align-items:center;gap:4px;}
+.next-label{font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--accent);font-weight:500;}
+#rapid-wrap{display:flex;align-items:center;gap:6px;}
+.rapid-toggle-sw{position:relative;width:40px;height:22px;flex-shrink:0;}
+.rapid-slider{position:absolute;inset:0;background:#2a1a4e;border-radius:11px;border:1.5px solid #4a3a7e;}
+#pause-btn,#sound-btn{background:rgba(var(--primary-rgb),.15);border:1.5px solid rgba(var(--primary-rgb),.3);border-radius:10px;color:var(--accent);font-family:'Fredoka',sans-serif;line-height:1;}
+#pause-btn{font-size:18px;padding:4px 10px;}
+#sound-btn{font-size:16px;padding:4px 8px;}
+/* canvas holder — the element we actually measure */
+#canvas-holder{position:relative;flex:1;width:100%;display:flex;align-items:center;
+  justify-content:center;overflow:hidden;}
+/* bottom bar */
+#bottom-bar{width:100%;display:flex;flex-direction:column;align-items:center;gap:5px;padding-bottom:10px;position:relative;}
+#powerup-row{display:flex;align-items:center;gap:6px;width:100%;padding:0 6px;box-sizing:border-box;}
+.pw-btn{display:flex;flex-direction:column;align-items:center;gap:2px;
+  padding:7px 4px;flex:1;min-width:0;border-radius:20px;border:1.5px solid transparent;
+  font-family:'Fredoka',sans-serif;position:relative;overflow:hidden;background:linear-gradient(135deg,#1a0838,#380868);border-color:#a050ff;color:#d0b0ff;}
+.pw-icon{font-size:20px;line-height:1;}
+.pw-label{font-size:11px;font-weight:600;letter-spacing:.5px;}
+#evolution{display:flex;align-items:center;gap:2px;flex-wrap:wrap;justify-content:center;}
+.evo-arrow{color:#6a5acd;font-size:9px;}
+.evo-dot{border-radius:50%;background:radial-gradient(circle at 35% 35%,#cbb8ff,#5a3aa8);display:inline-block;}
+/* ── Readout overlay (this part is NOT in the game) ── */
+#readout{position:absolute;inset:10px;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:14px;text-align:center;
+  background:rgba(8,6,24,.55);border:1px solid rgba(255,255,255,.08);border-radius:18px;
+  padding:18px;backdrop-filter:blur(4px);}
+#readout h1{font-size:14px;letter-spacing:1px;color:var(--accent);font-weight:600;text-transform:uppercase;}
+.field-big{font-family:'Space Mono',monospace;font-size:40px;font-weight:700;color:var(--gold);line-height:1.05;}
+.field-cap{font-size:12px;color:var(--dim);letter-spacing:1px;text-transform:uppercase;}
+table{font-family:'Space Mono',monospace;font-size:12px;color:#cbb8ff;border-collapse:collapse;}
+td{padding:2px 8px;text-align:left;}
+td.k{color:#8a7ab8;text-align:right;}
+#copybtn{margin-top:4px;font-family:'Fredoka',sans-serif;font-size:13px;font-weight:600;
+  padding:8px 20px;border-radius:20px;border:1.5px solid var(--accent);background:rgba(var(--accent-rgb),.15);
+  color:#fff;cursor:pointer;}
+#copybtn:active{transform:scale(.95);}
+#copied{font-size:11px;color:var(--gold);height:12px;}
+</style>
+</head>
+<body>
+<div id="space"></div>
+<div id="game-wrap">
+  <!-- topbar — same elements/sizes as the game so it occupies the same height -->
+  <div id="topbar">
+    <div class="score-box">
+      <div class="score-label">Score</div>
+      <div class="score-value">0</div>
+      <div class="best-score"></div>
+    </div>
+    <div id="rapid-wrap">
+      <span class="rapid-icon">&#9889;</span>
+      <span class="rapid-toggle-sw"><span class="rapid-slider"></span></span>
+    </div>
+    <button id="pause-btn">&#9776;</button>
+    <button id="sound-btn">🔊</button>
+    <div class="next-box">
+      <div class="next-label">Next</div>
+      <canvas id="next-canvas" width="52" height="52"></canvas>
+    </div>
+  </div>
+
+  <!-- the holder we measure -->
+  <div id="canvas-holder">
+    <div id="readout">
+      <h1>Cosmic Drop · Playfield Size</h1>
+      <div>
+        <div class="field-cap">Game field (W × H)</div>
+        <div class="field-big" id="field">— × —</div>
+      </div>
+      <table>
+        <tr><td class="k">holder</td><td id="r-holder">—</td></tr>
+        <tr><td class="k">innerW/H</td><td id="r-inner">—</td></tr>
+        <tr><td class="k">visualVP</td><td id="r-vv">—</td></tr>
+        <tr><td class="k">screen</td><td id="r-screen">—</td></tr>
+        <tr><td class="k">dpr</td><td id="r-dpr">—</td></tr>
+        <tr><td class="k">orient</td><td id="r-orient">—</td></tr>
+      </table>
+      <button id="copybtn">Copy all values</button>
+      <div id="copied"></div>
+    </div>
+  </div>
+
+  <!-- bottom bar — 6 power buttons + evolution row, same heights as the game -->
+  <div id="bottom-bar">
+    <div id="powerup-row">
+      <div class="pw-btn"><span class="pw-icon">⚡</span><span class="pw-label">SWEEP</span></div>
+      <div class="pw-btn"><span class="pw-icon">&#128165;</span><span class="pw-label">ZAP</span></div>
+      <div class="pw-btn"><span class="pw-icon">&#11014;</span><span class="pw-label">EVOLVE</span></div>
+      <div class="pw-btn"><span class="pw-icon">&#9732;</span><span class="pw-label">COMET</span></div>
+      <div class="pw-btn"><span class="pw-icon">🛸</span><span class="pw-label">MAGNET</span></div>
+      <div class="pw-btn"><span class="pw-icon">🌋</span><span class="pw-label">QUAKE</span></div>
+    </div>
+    <div id="evolution"></div>
+  </div>
+</div>
+
+<script>
+// Reproduce the evolution guide's height: 11 dots sized 10..28px in a wrap row.
+(function buildEvo(){
+  const evo=document.getElementById('evolution');
+  for(let i=0;i<11;i++){
+    const sz=10+i*1.8;
+    const d=document.createElement('span');
+    d.className='evo-dot';d.style.width=sz+'px';d.style.height=sz+'px';
+    evo.appendChild(d);
+    if(i<10){const a=document.createElement('span');a.className='evo-arrow';a.textContent='>';evo.appendChild(a);}
+  }
+})();
+
+// Mirror the exact formula from index.html setupGame():
+//   W = Math.min(holder.clientWidth-16, 460);  H = holder.clientHeight-16;
+function measure(){
+  const holder=document.getElementById('canvas-holder');
+  const hw=holder.clientWidth, hh=holder.clientHeight;
+  const W=Math.min(hw-16,460), H=hh-16;
+  const vv=window.visualViewport;
+  document.getElementById('field').textContent   = W+' × '+H;
+  document.getElementById('r-holder').textContent = hw+' × '+hh;
+  document.getElementById('r-inner').textContent  = window.innerWidth+' × '+window.innerHeight;
+  document.getElementById('r-vv').textContent     = vv?Math.round(vv.width)+' × '+Math.round(vv.height):'n/a';
+  document.getElementById('r-screen').textContent = screen.width+' × '+screen.height;
+  document.getElementById('r-dpr').textContent    = window.devicePixelRatio;
+  document.getElementById('r-orient').textContent = (screen.orientation&&screen.orientation.type)||
+    (window.innerWidth>window.innerHeight?'landscape':'portrait');
+  return {W,H,hw,hh};
+}
+function summary(){
+  const m=measure();
+  return [
+    'Cosmic Drop device measure',
+    'GAME FIELD (W x H): '+m.W+' x '+m.H,
+    'holder: '+m.hw+' x '+m.hh,
+    'innerW/H: '+window.innerWidth+' x '+window.innerHeight,
+    'visualVP: '+(window.visualViewport?Math.round(visualViewport.width)+' x '+Math.round(visualViewport.height):'n/a'),
+    'screen: '+screen.width+' x '+screen.height,
+    'dpr: '+window.devicePixelRatio,
+    'UA: '+navigator.userAgent
+  ].join('\n');
+}
+measure();
+window.addEventListener('resize',measure);
+window.addEventListener('orientationchange',()=>setTimeout(measure,300));
+if(window.visualViewport)visualViewport.addEventListener('resize',measure);
+
+document.getElementById('copybtn').addEventListener('click',async()=>{
+  const txt=summary();
+  try{await navigator.clipboard.writeText(txt);document.getElementById('copied').textContent='Copied ✓';}
+  catch(e){
+    // Fallback for browsers that block clipboard: show it for manual copy
+    const ta=document.createElement('textarea');ta.value=txt;ta.style.cssText='position:fixed;top:5%;left:5%;width:90%;height:50%;z-index:99;font-size:12px;';
+    document.body.appendChild(ta);ta.select();document.getElementById('copied').textContent='Long-press to copy ↑';
+  }
+});
+</script>
+</body>
+</html>
