@@ -18,7 +18,8 @@ All editable logic lives **above** that marker.
 - `index.html` — the canonical game file (branded "Galaxy Edition"). Always a copy of the latest archive version.
 - **Versioning workflow (always follow):**
   1. Write the new version as `archive/Cosmic_Drop_vN.html` (next number).
-  2. Copy it to `index.html` — **never edit `index.html` directly.**
+  2. Bump the hardcoded version label in the settings menu (grep `pointer-events:none;">v`) to match.
+  3. Copy it to `index.html` — **never edit `index.html` directly.**
   Why: clean version history in `archive/`; `index.html` stays a copy of the latest.
 - **Current version = the highest-numbered `archive/Cosmic_Drop_vN.html`** (confirm with `git log --oneline`). Never hard-code the current version number in docs — derive it, so it can't go stale across terminals.
 - **Repo:** https://github.com/BrandonsCodeIsGreat/cosmic-drop — deploys automatically from the `master` branch on push.
