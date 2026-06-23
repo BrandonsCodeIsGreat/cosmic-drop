@@ -14,8 +14,17 @@ Files before v11 end with two huge base64 WAV blobs (`DROP_B64`, `MERGE_B64`) un
 
 All editable logic lives **above** that marker.
 
-## File
-- `index.html` — the canonical game file (was `Cosmic_Drop_v10.html`, branded "Galaxy Edition").
+## File, Versioning & Hosting
+- `index.html` — the canonical game file (branded "Galaxy Edition"). Always a copy of the latest archive version.
+- **Versioning workflow (always follow):**
+  1. Write the new version as `archive/Cosmic_Drop_vN.html` (next number).
+  2. Copy it to `index.html` — **never edit `index.html` directly.**
+  Why: clean version history in `archive/`; `index.html` stays a copy of the latest.
+- **Current version = the highest-numbered `archive/Cosmic_Drop_vN.html`** (confirm with `git log --oneline`). Never hard-code the current version number in docs — derive it, so it can't go stale across terminals.
+- **Repo:** https://github.com/BrandonsCodeIsGreat/cosmic-drop — deploys automatically from the `master` branch on push.
+- **Live URLs:** https://cosmic-drop.onrender.com (Render, primary) and https://brandonscodeisgreat.github.io/cosmic-drop (GitHub Pages, via `.github/workflows/deploy-pages.yml`).
+- **Pending decisions / open questions live in `NOTES.md`** at the repo root (e.g. the leaderboard `_v4`→`_v5` reset). Check it before competitive-scoring changes.
+- **Sounds:** `sounds/drop.mp3` + `sounds/merge.mp3`, loaded via `fetch()` (since v11; replaced inline base64 blobs). `archive/device-measure.html` measures a device's real playfield size.
 
 ## Architecture
 Single HTML file. CDN deps only: Matter.js (physics), Firebase compat SDK v10.12.0 (leaderboard).
