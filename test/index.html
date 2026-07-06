@@ -1,0 +1,2672 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Cosmic Drop</title>
+<link rel="icon" type="image/png" href="favicon.png">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
+<!-- Firebase SDK — powers the shared leaderboard -->
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+<style>:root{
+  --accent:#9b8cff;     --accent-rgb:155,140,255;
+  --primary:#7b5cff;    --primary-alt:#b14dff;    --primary-rgb:123,92,255;
+  --btn-grad:linear-gradient(135deg,#7b5cff,#b14dff);
+  --gold:#ffd700;       --light:#cbb8ff;           --dim:#5a4a88;
+  --bg:#0a0a1f;         --bg-rgb:10,10,31;
+}
+
+@import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600;700&family=Space+Mono:wght@700&display=swap');
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+html,body{height:100%;overflow:hidden;background:var(--bg);font-family:'Fredoka',sans-serif;
+  user-select:none;-webkit-user-select:none;touch-action:none;}
+#space{position:fixed;inset:0;background:
+  radial-gradient(ellipse at 20% 10%,rgba(120,80,220,.25),transparent 50%),
+  radial-gradient(ellipse at 80% 80%,rgba(40,120,200,.25),transparent 50%),
+  linear-gradient(180deg,#0d0d2b 0%,#14082e 60%,#1a0a2e 100%);}
+#game-wrap{position:relative;height:100%;display:flex;flex-direction:column;
+  align-items:center;max-width:480px;margin:0 auto;}
+
+/* ── TOP BAR ── */
+#topbar{width:100%;display:flex;justify-content:space-between;align-items:center;
+  padding:14px 18px 8px;z-index:10;}
+.score-box{color:#fff;}
+.score-label{font-size:12px;letter-spacing:2px;text-transform:uppercase;color:var(--accent);font-weight:500;}
+.score-value{font-family:'Space Mono',monospace;font-size:34px;font-weight:700;line-height:1;
+  text-shadow:0 0 20px rgba(var(--accent-rgb),.6);}
+.next-box{display:flex;flex-direction:column;align-items:center;gap:4px;}
+.next-label{font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--accent);font-weight:500;}
+
+#rapid-wrap{display:flex;align-items:center;gap:6px;}
+#rapid-label{font-size:11px;color:var(--accent);letter-spacing:1px;text-transform:uppercase;font-weight:600;}
+/* Rapid toggle — same style as settings toggles but smaller */
+.rapid-toggle-sw{position:relative;width:40px;height:22px;flex-shrink:0;}
+.rapid-toggle-sw input{opacity:0;width:0;height:0;position:absolute;}
+.rapid-slider{position:absolute;inset:0;background:#2a1a4e;border-radius:11px;
+  transition:background .3s;border:1.5px solid #4a3a7e;cursor:pointer;}
+.rapid-slider::before{content:'';position:absolute;width:14px;height:14px;
+  left:3px;top:3px;background:#6a5aaa;border-radius:50%;transition:transform .3s,background .3s;}
+.rapid-toggle-sw input:checked+.rapid-slider{background:#3a2a7e;border-color:#ff9a3c;}
+.rapid-toggle-sw input:checked+.rapid-slider::before{transform:translateX(18px);background:#ff9a3c;}
+
+/* ── CANVAS ── */
+#canvas-holder{position:relative;flex:1;width:100%;display:flex;align-items:center;
+  justify-content:center;overflow:hidden;}
+#canvas-wrap{position:relative;transition:transform 0.35s cubic-bezier(.34,1.56,.64,1);transform-origin:center center;}
+#canvas-wrap.zoomed-out{transform:scale(0.88);}
+
+#flash{position:absolute;inset:0;pointer-events:none;border-radius:18px;opacity:0;z-index:20;}
+#canvas-wrap.select-mode::after{content:'';position:absolute;inset:-3px;border-radius:21px;
+  border:3px solid currentColor;pointer-events:none;z-index:25;animation:selectPulse .8s ease-in-out infinite;}
+#canvas-wrap.select-destroy{color:#ff5c8a;}
+#canvas-wrap.select-upgrade{color:#5cffb8;}
+#canvas-wrap.select-magnet{color:var(--gold);}
+#canvas-wrap.select-comet{color:#00eeff;}
+/* Comet button */
+#comet-btn{background:linear-gradient(135deg,#001a2e,#003a5a);border-color:#00ccff;color:#a0eeff;box-shadow:0 0 10px rgba(0,204,255,.2);}
+#comet-btn.selected{border-color:#00eeff;box-shadow:0 0 18px rgba(0,238,255,.6);animation:pulseBtn .7s ease-in-out infinite;}
+/* Magnet button */
+#magnet-btn{background:linear-gradient(135deg,#1a1400,#3a3000);border-color:var(--gold);color:#ffec80;box-shadow:0 0 10px rgba(255,215,0,.2);}
+#magnet-btn.selected{border-color:#ffe040;box-shadow:0 0 18px rgba(255,224,64,.6);animation:pulseBtn .7s ease-in-out infinite;}
+/* Quake button */
+#quake-btn{background:linear-gradient(135deg,#200a0a,#4a1010);border-color:#ff4400;color:#ffaa80;box-shadow:0 0 10px rgba(255,68,0,.2);}
+#quake-btn.quake-active{border-color:#ff6600;box-shadow:0 0 24px rgba(255,100,0,.8);animation:quakePulse .25s ease-in-out infinite;}
+@keyframes quakePulse{0%,100%{transform:scale(1);}50%{transform:scale(1.06);}}
+@keyframes selectPulse{50%{opacity:.3;}}
+#select-hint{position:absolute;top:8px;left:50%;transform:translateX(-50%);
+  padding:5px 14px;border-radius:20px;font-size:13px;font-weight:600;
+  letter-spacing:1px;pointer-events:none;z-index:30;white-space:nowrap;transition:opacity .2s;}
+#select-hint.destroy{background:rgba(255,92,138,.25);color:#ff5c8a;border:1px solid rgba(255,92,138,.4);}
+#select-hint.upgrade{background:rgba(92,255,184,.2);color:#5cffb8;border:1px solid rgba(92,255,184,.35);}
+#select-hint.magnet{background:rgba(255,215,0,.2);color:var(--gold);border:1px solid rgba(255,215,0,.35);}
+#select-hint.comet{background:rgba(0,238,255,.15);color:#00eeff;border:1px solid rgba(0,238,255,.35);}
+#select-hint.cancel{background:rgba(255,255,255,.06);color:rgba(255,255,255,.4);border:1px solid rgba(255,255,255,.12);font-size:11px;font-weight:500;letter-spacing:0.5px;}
+#select-hint.hidden{opacity:0;pointer-events:none;}
+
+/* ── BOTTOM BAR ── */
+#bottom-bar{width:100%;display:flex;flex-direction:column;align-items:center;gap:5px;padding-bottom:10px;position:relative;}
+#powerup-row{display:flex;align-items:center;gap:6px;width:100%;padding:0 6px;box-sizing:border-box;}
+.pw-btn{display:flex;flex-direction:column;align-items:center;gap:2px;
+  padding:7px 4px;flex:1;min-width:0;border-radius:20px;border:1.5px solid transparent;
+  font-family:'Fredoka',sans-serif;cursor:pointer;transition:transform .15s,box-shadow .2s,opacity .2s;
+  position:relative;overflow:hidden;}
+.pw-btn:active:not(:disabled){transform:scale(.91);}
+.pw-btn:disabled{opacity:.35;cursor:default;}
+.pw-icon{font-size:20px;line-height:1;}
+.pw-label{font-size:11px;font-weight:600;letter-spacing:.5px;}
+.pw-cd-overlay{position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,.55);
+  transition:height .1s linear;pointer-events:none;}
+.pw-cd-text{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+  font-size:13px;font-weight:700;pointer-events:none;}
+#sweep-btn{background:linear-gradient(135deg,#1a0838,#380868);border-color:#a050ff;color:#d0b0ff;box-shadow:0 0 10px rgba(160,80,255,.25);}
+#sweep-btn.active{border-color:#c080ff;box-shadow:0 0 18px rgba(180,100,255,.5);}
+#destroy-btn{background:linear-gradient(135deg,#3a0818,#6e1230);border-color:#ff5c8a;color:#ffb8cc;box-shadow:0 0 10px rgba(255,92,138,.2);}
+#destroy-btn.selected{border-color:#ff88aa;box-shadow:0 0 18px rgba(255,92,138,.6);animation:pulseBtn .7s ease-in-out infinite;}
+#upgrade-btn{background:linear-gradient(135deg,#083a20,#126e38);border-color:#5cffb8;color:#a0ffd8;box-shadow:0 0 10px rgba(92,255,184,.2);}
+#upgrade-btn.selected{border-color:#88ffcc;box-shadow:0 0 18px rgba(92,255,184,.6);animation:pulseBtn .7s ease-in-out infinite;}
+@keyframes pulseBtn{50%{box-shadow:0 0 28px currentColor;}}
+
+#evolution{display:flex;align-items:center;gap:2px;flex-wrap:wrap;justify-content:center;}
+.evo-arrow{color:#6a5acd;font-size:9px;}
+
+/* ── GAME OVER ── */
+#gameover{position:absolute;inset:0;background:rgba(var(--bg-rgb),.92);
+  display:none;flex-direction:column;align-items:center;justify-content:center;
+  gap:18px;z-index:50;backdrop-filter:blur(8px);}
+#gameover.show{display:flex;animation:fadeIn .5s;}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+#gameover h1{color:#fff;font-size:42px;font-weight:700;text-shadow:0 0 30px rgba(255,77,109,.8);}
+#gameover .final-score{color:var(--accent);font-family:'Space Mono',monospace;font-size:28px;}
+#resume-screen{position:absolute;inset:0;background:rgba(var(--bg-rgb),.96);
+  display:none;flex-direction:column;align-items:center;justify-content:center;
+  gap:16px;z-index:80;backdrop-filter:blur(8px);}
+#resume-screen.show{display:flex;animation:fadeIn .4s;}
+#resume-screen .resume-icon{font-size:52px;line-height:1;}
+#resume-screen h2{color:#fff;font-size:30px;font-weight:700;text-shadow:0 0 26px rgba(123,92,255,.7);}
+#resume-screen .resume-sub{color:var(--accent);font-family:'Space Mono',monospace;font-size:15px;margin-top:-4px;}
+.share-score-btn{padding:10px 28px;font-family:'Fredoka',sans-serif;font-size:16px;font-weight:600;
+  color:var(--accent);background:transparent;border:2px solid var(--accent);border-radius:40px;
+  cursor:pointer;transition:background .2s,color .2s;letter-spacing:1px;}
+.share-score-btn:hover{background:var(--accent);color:#0d0d1a;}
+#share-card-overlay{position:absolute;inset:0;background:rgba(var(--bg-rgb),.95);
+  display:none;flex-direction:column;align-items:center;justify-content:center;
+  gap:16px;z-index:60;backdrop-filter:blur(8px);}
+#share-card-overlay.show{display:flex;animation:fadeIn .3s;}
+#share-card-overlay img{max-width:90%;border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,.5);}
+#share-card-overlay .share-hint{color:rgba(255,255,255,0.55);font-size:13px;text-align:center;font-family:'Space Mono',monospace;}
+.game-btn{margin-top:10px;padding:16px 44px;font-family:'Fredoka',sans-serif;font-size:20px;
+  font-weight:600;color:#fff;background:var(--btn-grad);
+  border:none;border-radius:40px;box-shadow:0 8px 24px rgba(var(--primary-rgb),.5);
+  cursor:pointer;transition:transform .15s;}
+.game-btn:active{transform:scale(.94);}
+
+/* ── TITLE SCREEN ── */
+#title{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+  text-align:center;z-index:40;width:90%;}
+#title h1{color:#fff;font-size:48px;font-weight:700;letter-spacing:1px;
+  text-shadow:0 0 40px rgba(var(--accent-rgb),.8);margin-bottom:8px;}
+#title p{color:var(--accent);font-size:16px;margin-bottom:24px;}
+.title-btn-row{display:flex;flex-direction:column;align-items:center;gap:12px;}
+#start-btn{animation:floatAnim 2s ease-in-out infinite;}
+@keyframes floatAnim{50%{transform:translateY(-8px)}}
+#settings-open-btn{
+  padding:10px 32px;font-family:'Fredoka',sans-serif;font-size:16px;font-weight:600;
+  color:var(--accent);background:rgba(var(--primary-rgb),.12);border:1.5px solid rgba(var(--primary-rgb),.35);
+  border-radius:30px;cursor:pointer;transition:all .2s;letter-spacing:.5px;}
+#settings-open-btn:active{transform:scale(.95);background:rgba(var(--primary-rgb),.22);}
+
+/* ── SETTINGS SCREEN ── */
+#settings{position:absolute;inset:0;background:rgba(var(--bg-rgb),.97);
+  display:none;flex-direction:column;align-items:center;justify-content:center;
+  gap:0;z-index:45;backdrop-filter:blur(12px);}
+#settings.show{display:flex;animation:fadeIn .3s;}
+#settings-panel{width:88%;max-width:360px;display:flex;flex-direction:column;gap:20px;}
+#settings h2{color:#fff;font-size:30px;font-weight:700;text-align:center;
+  letter-spacing:1px;margin-bottom:4px;}
+#settings .subtitle{color:var(--accent);font-size:14px;text-align:center;margin-bottom:8px;}
+.setting-row{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);
+  border-radius:16px;padding:16px 20px;display:flex;flex-direction:column;gap:12px;}
+.setting-label{color:var(--light);font-size:15px;font-weight:600;letter-spacing:.5px;}
+.setting-desc{color:#7a6aaa;font-size:12px;margin-top:-6px;}
+
+/* Toggle switch */
+.toggle-row{display:flex;justify-content:space-between;align-items:center;}
+.toggle{position:relative;width:48px;height:26px;flex-shrink:0;}
+.toggle input{opacity:0;width:0;height:0;}
+.toggle-slider{position:absolute;inset:0;background:#2a1a4e;border-radius:13px;
+  transition:background .3s;border:1.5px solid #4a3a7e;cursor:pointer;}
+.toggle-slider::before{content:'';position:absolute;width:18px;height:18px;
+  left:3px;top:3px;background:#6a5aaa;border-radius:50%;transition:transform .3s,background .3s;}
+.toggle input:checked+.toggle-slider{background:#3a2a7e;border-color:var(--primary);}
+.toggle input:checked+.toggle-slider::before{transform:translateX(22px);background:#a080ff;}
+
+/* Size picker */
+.size-options{display:flex;gap:8px;}
+.size-opt{flex:1;padding:10px 4px;border-radius:12px;border:1.5px solid rgba(255,255,255,.15);
+  background:rgba(255,255,255,.04);color:var(--accent);font-family:'Fredoka',sans-serif;
+  font-size:14px;font-weight:600;cursor:pointer;transition:all .2s;text-align:center;}
+.size-opt.active{background:rgba(var(--primary-rgb),.25);border-color:var(--primary);color:var(--light);
+  box-shadow:0 0 12px rgba(var(--primary-rgb),.3);}
+.size-preview{display:flex;align-items:center;justify-content:center;gap:8px;margin-top:4px;}
+
+#settings-close-btn{
+  padding:14px 44px;font-family:'Fredoka',sans-serif;font-size:18px;font-weight:600;
+  color:#fff;background:var(--btn-grad);
+  border:none;border-radius:40px;box-shadow:0 6px 20px rgba(var(--primary-rgb),.4);
+  cursor:pointer;transition:transform .15s;align-self:center;}
+#settings-close-btn:active{transform:scale(.94);}
+
+/* ── BEST SCORE ── */
+.best-score{font-size:11px;letter-spacing:1.5px;color:var(--dim);text-transform:uppercase;
+  font-weight:600;min-height:14px;transition:color .4s,text-shadow .4s;margin-top:1px;}
+.best-score.new-best{color:var(--gold);text-shadow:0 0 10px rgba(255,215,0,.55);}
+
+/* ── NAME ENTRY MODAL ── */
+#name-entry{position:absolute;inset:0;background:rgba(var(--bg-rgb),.95);
+  display:none;flex-direction:column;align-items:center;justify-content:center;
+  gap:16px;z-index:55;backdrop-filter:blur(10px);}
+#name-entry.show{display:flex;animation:fadeIn .4s;}
+#name-entry .ne-crown{font-size:48px;line-height:1;}
+#name-entry h2{color:var(--gold);font-size:30px;font-weight:700;text-align:center;
+  text-shadow:0 0 24px rgba(255,215,0,.5);margin-bottom:0;}
+#name-entry .ne-sub{color:var(--accent);font-size:15px;text-align:center;}
+#name-entry .ne-score{font-family:'Space Mono',monospace;color:#fff;font-size:26px;
+  text-shadow:0 0 18px rgba(var(--accent-rgb),.6);}
+#name-input{background:rgba(255,255,255,.08);border:1.5px solid rgba(var(--accent-rgb),.4);
+  border-radius:16px;padding:14px 20px;font-family:'Fredoka',sans-serif;font-size:20px;
+  color:#fff;width:240px;text-align:center;outline:none;transition:border-color .2s;
+  caret-color:var(--accent);}
+#name-input:focus{border-color:var(--accent);box-shadow:0 0 14px rgba(var(--accent-rgb),.25);}
+#name-input::placeholder{color:#4a3a6a;}
+.ne-btn-row{display:flex;gap:10px;}
+
+/* ── LEADERBOARD ── */
+#leaderboard{position:absolute;inset:0;background:rgba(var(--bg-rgb),.97);
+  display:none;flex-direction:column;align-items:center;justify-content:flex-start;
+  gap:0;z-index:56;backdrop-filter:blur(12px);overflow-y:auto;padding:24px 0 32px;}
+#leaderboard.show{display:flex;animation:fadeIn .3s;}
+#leaderboard h2{color:#fff;font-size:30px;font-weight:700;letter-spacing:1px;margin-bottom:4px;}
+#leaderboard .lb-sub{color:var(--accent);font-size:13px;letter-spacing:1px;margin-bottom:18px;}
+#lb-table{width:88%;max-width:380px;border-collapse:collapse;}
+#lb-table th{color:#6a5aaa;font-size:11px;letter-spacing:2px;text-transform:uppercase;
+  font-weight:600;padding:6px 8px;border-bottom:1px solid rgba(255,255,255,.08);}
+#lb-table td{padding:10px 8px;border-bottom:1px solid rgba(255,255,255,.05);}
+#lb-table tr:last-child td{border-bottom:none;}
+#lb-table tr.lb-highlight td{background:rgba(255,215,0,.06);border-radius:8px;}
+#lb-table tr.lb-highlight .lb-name{color:var(--gold);}
+.lb-rank{text-align:center;font-size:17px;width:36px;color:#e0d8ff;}
+.lb-name{color:#e0d8ff;font-weight:600;font-size:15px;}
+.lb-score{font-family:'Space Mono',monospace;color:var(--accent);font-size:14px;text-align:right;}
+.lb-date{font-size:11px;color:var(--dim);text-align:right;white-space:nowrap;}
+.lb-empty{text-align:center;color:var(--dim);padding:32px;font-size:15px;}
+#lb-close-btn{margin-top:24px;padding:13px 44px;font-family:'Fredoka',sans-serif;font-size:18px;
+  font-weight:600;color:#fff;background:var(--btn-grad);
+  border:none;border-radius:40px;box-shadow:0 6px 20px rgba(var(--primary-rgb),.4);
+  cursor:pointer;transition:transform .15s;}
+#lb-close-btn:active{transform:scale(.94);}
+#lb-open-btn,#go-lb-btn{padding:10px 32px;font-family:'Fredoka',sans-serif;font-size:16px;font-weight:600;
+  color:var(--gold);background:rgba(255,215,0,.08);border:1.5px solid rgba(255,215,0,.3);
+  border-radius:30px;cursor:pointer;transition:all .2s;letter-spacing:.5px;}
+#lb-open-btn:active,#go-lb-btn:active{transform:scale(.95);background:rgba(255,215,0,.16);}
+
+
+/* ── TOPBAR BUTTONS ── */
+#pause-btn,#sound-btn{background:rgba(var(--primary-rgb),.15);border:1.5px solid rgba(var(--primary-rgb),.3);border-radius:10px;color:var(--accent);cursor:pointer;font-family:'Fredoka',sans-serif;line-height:1;transition:background .2s;}
+#pause-btn{font-size:18px;padding:4px 10px;}
+#sound-btn{font-size:16px;padding:4px 8px;}
+.rapid-icon{font-size:13px;color:#ff9a3c;font-weight:700;letter-spacing:1px;}
+
+/* ── PAUSE MENU ── */
+#pause-menu{display:none;position:absolute;inset:0;background:rgba(var(--bg-rgb),.92);flex-direction:column;align-items:center;justify-content:center;gap:16px;z-index:60;backdrop-filter:blur(12px);}
+#pause-menu h2{color:#fff;font-size:32px;font-weight:700;letter-spacing:1px;}
+.btn-resume{padding:14px 44px;font-family:'Fredoka',sans-serif;font-size:18px;font-weight:600;color:#fff;background:var(--btn-grad);border:none;border-radius:40px;box-shadow:0 6px 20px rgba(var(--primary-rgb),.4);cursor:pointer;}
+.btn-ghost{padding:12px 36px;font-family:'Fredoka',sans-serif;font-size:16px;font-weight:600;color:var(--light);background:rgba(var(--primary-rgb),.15);border:1.5px solid rgba(var(--primary-rgb),.35);border-radius:30px;cursor:pointer;}
+.btn-outline{padding:12px 36px;font-family:'Fredoka',sans-serif;font-size:16px;font-weight:600;color:var(--accent);background:rgba(255,255,255,.05);border:1.5px solid rgba(255,255,255,.15);border-radius:30px;cursor:pointer;}
+
+/* ── MISC EXTRACTED FROM INLINE STYLES ── */
+.version-tag{color:var(--primary);font-size:11px;letter-spacing:4px;text-transform:uppercase;margin-top:4px;margin-bottom:4px;font-weight:600;}
+.btn-skip{padding:13px 24px;font-family:'Fredoka',sans-serif;font-size:16px;font-weight:600;color:#6a5aaa;background:rgba(255,255,255,.04);border:1.5px solid rgba(255,255,255,.1);border-radius:40px;cursor:pointer;}
+.game-btn--sm{padding:13px 32px;font-size:17px;margin-top:0;}
+#menu-btn,#resume-menu-btn{margin-top:0;padding:10px 32px;font-family:'Fredoka',sans-serif;font-size:16px;font-weight:600;color:var(--accent);background:rgba(var(--primary-rgb),.12);border:1.5px solid rgba(var(--primary-rgb),.35);border-radius:30px;cursor:pointer;}
+#lb-table th:nth-child(2){text-align:left;}
+#lb-table th:nth-child(3),#lb-table th:nth-child(4){text-align:right;}
+
+/* ── LEADERBOARD TABS ── */
+.lb-tabs{display:flex;gap:6px;margin-bottom:6px;width:100%;}
+.lb-tab{flex:1;padding:7px 4px;border-radius:10px;border:1.5px solid rgba(255,255,255,.15);
+  background:transparent;color:rgba(255,255,255,.4);font-family:inherit;font-size:12px;
+  cursor:pointer;transition:all .2s;}
+.lb-tab:hover{border-color:rgba(255,255,255,.35);color:rgba(255,255,255,.7);}
+.lb-tab.active{border-color:var(--gold);color:var(--gold);background:rgba(255,215,0,.1);}
+/* Reverse-mode leaderboard — tabs and subtitle go orange to match the reverse badge */
+#leaderboard.reverse-mode .lb-tab.active{border-color:#ff9a3c;color:#ff9a3c;background:rgba(255,154,60,.1);}
+#leaderboard.reverse-mode #lb-size-title{color:#ff9a3c;}
+/* ── GAME MODE SELECTOR ── */
+.mode-opt{flex:1;padding:10px 4px;border-radius:12px;border:1.5px solid rgba(255,255,255,.15);
+  text-align:center;font-size:13px;cursor:pointer;transition:all .2s;
+  color:rgba(255,255,255,.4);user-select:none;}
+.mode-opt:hover{border-color:rgba(255,255,255,.35);color:rgba(255,255,255,.7);}
+.mode-opt.active{background:rgba(255,215,0,.12);border-color:var(--gold);color:var(--gold);}
+.mode-opt[data-mode="zen"].active{background:rgba(91,191,255,.1);border-color:#5bbfff;color:#5bbfff;}
+@keyframes eggPulse{0%,100%{opacity:.65;}50%{opacity:1;}}
+/* ── COMPETITION CHARGES ── */
+#comp-charges{
+  position:absolute;bottom:100%;left:50%;transform:translateX(-50%);
+  z-index:5;pointer-events:none;margin-bottom:6px;
+  display:flex;align-items:center;justify-content:center;gap:6px;
+  background:rgba(6,6,18,0.62);border:1px solid rgba(255,255,255,0.07);
+  border-radius:20px;padding:4px 14px 5px;font-size:11px;white-space:nowrap;
+  backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);}
+.comp-uses-label{color:var(--dim);letter-spacing:2px;font-size:10px;}
+.cp-on{color:var(--gold);font-size:15px;line-height:1;}
+.cp-off{color:#252535;font-size:15px;line-height:1;}
+/* ── REVERSE MODE ── */
+.reverse-badge{font-size:10px;letter-spacing:2px;color:#ff9a3c;text-transform:uppercase;
+  font-weight:700;min-height:12px;margin-top:1px;}
+/* Reverse mode toggle uses orange accent instead of purple */
+#setting-reversemode:checked+.reverse-toggle-slider{background:#3a2010;border-color:#ff8020;}
+#setting-reversemode:checked+.reverse-toggle-slider::before{transform:translateX(22px);background:#ff9a3c;}
+
+.hidden{display:none!important;}
+</style>
+</head>
+<body>
+<div id="space"></div>
+<div id="game-wrap">
+  <div id="topbar">
+    <div class="score-box">
+      <div class="score-label">Score</div>
+      <div class="score-value" id="score">0</div>
+      <div class="best-score" id="best-score"></div>
+      <div class="reverse-badge hidden" id="reverse-badge">⬇ REVERSE</div>
+    </div>
+    <div id="rapid-wrap">
+    <span class="rapid-icon">&#9889;</span>
+    <label class="rapid-toggle-sw">
+      <input type="checkbox" id="rapid-toggle">
+      <span class="rapid-slider"></span>
+    </label>
+  </div>
+  <button id="pause-btn" title="Menu" onclick="openPauseMenu()">&#9776;</button>
+  <button id="sound-btn" title="Toggle sound" onclick="toggleSound()">🔊</button>
+<div class="next-box">
+      <div class="next-label">Next</div>
+      <canvas id="next-canvas" width="52" height="52"></canvas>
+    </div>
+  </div>
+
+  <div id="canvas-holder">
+    <div id="canvas-wrap">
+      <div id="flash"></div>
+      <div id="select-hint" class="hidden"></div>
+    </div>
+  </div>
+
+  <div id="bottom-bar">
+    <div id="comp-charges" class="hidden">
+      <span class="comp-uses-label">USES</span>
+      <span id="charge-pips"></span>
+    </div>
+    <div id="powerup-row">
+      <button class="pw-btn" id="sweep-btn" disabled>
+        <span class="pw-icon">⚡</span>
+        <span class="pw-label">SWEEP</span>
+        <div class="pw-cd-overlay" id="sweep-overlay"></div>
+        <span class="pw-cd-text hidden" id="sweep-cd"></span>
+      </button>
+      <button class="pw-btn" id="destroy-btn" disabled>
+        <span class="pw-icon">&#128165;</span>
+        <span class="pw-label">ZAP</span>
+        <div class="pw-cd-overlay" id="destroy-overlay"></div>
+        <span class="pw-cd-text hidden" id="destroy-cd"></span>
+      </button>
+      <button class="pw-btn" id="upgrade-btn" disabled>
+        <span class="pw-icon">&#11014;</span>
+        <span class="pw-label">EVOLVE</span>
+        <div class="pw-cd-overlay" id="upgrade-overlay"></div>
+        <span class="pw-cd-text hidden" id="upgrade-cd"></span>
+      </button>
+      <button class="pw-btn" id="comet-btn" disabled>
+        <span class="pw-icon">&#9732;</span>
+        <span class="pw-label">COMET</span>
+        <div class="pw-cd-overlay" id="comet-overlay"></div>
+        <span class="pw-cd-text hidden" id="comet-cd"></span>
+      </button>
+      <button class="pw-btn" id="magnet-btn" disabled>
+        <span class="pw-icon">🛸</span>
+        <span class="pw-label">MAGNET</span>
+        <div class="pw-cd-overlay" id="magnet-overlay"></div>
+        <span class="pw-cd-text hidden" id="magnet-cd"></span>
+      </button>
+      <button class="pw-btn" id="quake-btn" disabled>
+        <span class="pw-icon">🌋</span>
+        <span class="pw-label">QUAKE</span>
+        <div class="pw-cd-overlay" id="quake-overlay"></div>
+        <span class="pw-cd-text hidden" id="quake-cd"></span>
+      </button>
+    </div>
+    <div id="evolution"></div>
+  </div>
+
+  <!-- PAUSE / MENU OVERLAY -->
+  <div id="pause-menu">
+    <h2>Paused</h2>
+    <button class="btn-resume" onclick="closePauseMenu()">&#9654; Resume</button>
+    <button class="btn-ghost"  onclick="restartGame()">&#8635; Restart</button>
+    <button class="btn-outline" onclick="returnToMenu()">&#8592; Main Menu</button>
+  </div>
+
+  <!-- NAME ENTRY MODAL (top-10 trigger) -->
+  <div id="name-entry">
+    <div class="ne-crown">🏆</div>
+    <h2>Top 10!</h2>
+    <div class="ne-sub">You scored</div>
+    <div class="ne-score" id="ne-score">0</div>
+    <div class="ne-sub">Enter your name for the leaderboard:</div>
+    <input id="name-input" type="text" maxlength="18" placeholder="Your name…" autocomplete="off" spellcheck="false">
+    <div class="ne-btn-row">
+      <button class="game-btn game-btn--sm" onclick="submitName()">Save Score</button>
+      <button class="btn-skip" onclick="skipNameEntry()">Skip</button>
+    </div>
+  </div>
+
+  <!-- LEADERBOARD OVERLAY -->
+  <div id="leaderboard">
+    <h2>🏆 Leaderboard</h2>
+    <div class="lb-tabs">
+      <button class="lb-tab" id="lb-tab-small">🔹 Small</button>
+      <button class="lb-tab active" id="lb-tab-medium">🔷 Medium</button>
+      <button class="lb-tab" id="lb-tab-large">🔶 Large</button>
+    </div>
+    <div class="lb-sub" id="lb-size-title">Medium Planets — Top 10</div>
+    <table id="lb-table">
+      <thead>
+        <tr>
+          <th class="lb-rank">#</th>
+          <th>Name</th>
+          <th>Score</th>
+          <th>Date</th>
+        </tr>
+      </thead>
+      <tbody id="lb-tbody"></tbody>
+    </table>
+    <button id="lb-close-btn">← Back</button>
+  </div>
+
+  <!-- TITLE SCREEN -->
+  <div id="title">
+    <h1>COSMIC<br>DROP</h1>
+    <p class="version-tag">GALAXY EDITION</p>
+    <p class="version-tag" style="color:#ff9a3c;letter-spacing:3px;">⚠ TEST ZONE</p>
+    <p>Merge planets. Build a star.</p>
+    <div class="title-btn-row">
+      <button id="start-btn" class="game-btn">PLAY</button>
+      <button id="lb-open-btn">🏆 Leaderboard</button>
+      <button id="settings-open-btn">&#9881; Settings</button>
+    </div>
+  </div>
+
+  <!-- SETTINGS SCREEN -->
+  <div id="settings">
+    <div id="settings-panel">
+      <h2>&#9881; Settings</h2>
+      <p class="subtitle">These apply to your next game</p>
+
+      <!-- Game Mode -->
+      <div class="setting-row">
+        <div class="setting-label">Game Mode</div>
+        <div class="setting-desc" id="mode-desc">🏆 5 powerup uses per game. Scores submitted to leaderboard.</div>
+        <div class="size-options" style="margin-top:8px;">
+          <div class="mode-opt active" data-mode="competition" id="mode-competition">🏆 Competition</div>
+          <div class="mode-opt" data-mode="zen" id="mode-zen">🧘 Zen</div>
+        </div>
+        <div id="egg-toast" class="hidden" style="margin-top:8px;text-align:center;color:#ff9a3c;font-size:11px;letter-spacing:1px;animation:eggPulse 1.5s ease-in-out infinite;">✦ No Cooldowns Activated!</div>
+      </div>
+
+      <!-- Reverse Mode toggle -->
+      <div class="setting-row">
+        <div class="toggle-row">
+          <div>
+            <div class="setting-label">⬇ Reverse Mode</div>
+            <div class="setting-desc">Drop giant planets — merge them smaller &amp; smaller. Two asteroids vanish in a singularity!</div>
+          </div>
+          <label class="toggle">
+            <input type="checkbox" id="setting-reversemode">
+            <span class="toggle-slider reverse-toggle-slider"></span>
+          </label>
+        </div>
+      </div>
+
+      <!-- Ball size -->
+      <div class="setting-row">
+        <div class="setting-label">Ball Size</div>
+        <div class="setting-desc">Asteroid stays the same. Affects all other planets.</div>
+        <div class="size-options">
+          <div class="size-opt" data-size="small">Small</div>
+          <div class="size-opt active" data-size="medium">Medium</div>
+          <div class="size-opt" data-size="large">Large</div>
+        </div>
+        <div class="size-preview" id="size-preview"></div>
+      </div>
+
+      <div style="position:relative;display:flex;justify-content:center;">
+        <button id="settings-close-btn">Done</button>
+        <span style="position:absolute;right:0;top:50%;transform:translateY(-50%);color:#3d2e5a;font-size:10px;letter-spacing:2px;pointer-events:none;">v23-test</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- GAME OVER -->
+  <div id="gameover">
+    <h1>GAME OVER</h1>
+    <div class="final-score">Score: <span id="final-score">0</span></div>
+    <button id="restart-btn" class="game-btn">PLAY AGAIN</button>
+    <button id="go-lb-btn">🏆 Leaderboard</button>
+    <button id="share-btn" class="share-score-btn">&#128228; Share Score</button>
+    <button id="menu-btn">&#8592; Main Menu</button>
+  </div>
+  <div id="resume-screen">
+    <div class="resume-icon">🪐</div>
+    <h2>Game in progress</h2>
+    <div class="resume-sub" id="resume-sub"></div>
+    <button id="resume-btn" class="game-btn">Resume Game</button>
+    <button id="resume-menu-btn">&#8592; Main Menu</button>
+  </div>
+  <div id="share-card-overlay">
+    <img id="share-card-img" src="" alt="Score card">
+    <div class="share-hint">Long press the image to share</div>
+    <button id="share-card-close-btn" class="share-score-btn">Close</button>
+  </div>
+</div>
+
+<script>
+const {Engine,Runner,Bodies,Composite,Events,Body}=Matter;
+// ============================================================
+//  ⚠ TEST BUILD — lives at test/index.html, served at /test/.
+//  Differences from the prod index.html:
+//   • COMET reworked: drag a line → comet crosses the whole screen
+//     along it, zapping every planet it touches. Physics is PAUSED
+//     (Runner stopped) for the duration of the flight.
+//   • localStorage keys carry a '_test' suffix and the Firebase
+//     leaderboard reads/writes 'scores_test/' — the test zone shares
+//     an origin with prod on GitHub Pages, so this keeps test scores
+//     and saves fully separate from the real game.
+//   • Sounds load from ../sounds/ (assets stay at the repo root).
+//  Promote a finished feature by folding its diff into the next
+//  archive/Cosmic_Drop_vN.html per the normal versioning workflow.
+// ============================================================
+// ============================================================
+//  FILE MAP — search "── NAME" to jump to a section.
+//
+//  SETTINGS · PLANET DRAW FUNCTIONS · STATE · COMET STATE
+//  MAGNET STATE · QUAKE STATE · RAPID MODE · AUDIO · EFFECTS
+//  SETUP · DRAW LOOP · BODIES · SPAWN / DROP / MERGE
+//  FIND BODY AT POINT · COMET FIRE · ZAP / EVOLVE · SELECT MODE
+//  QUAKE POWERUP · SWEEP · POWERUP UI · AIM · INPUT
+//  SELECT-MODE POWERUPS · HIGH SCORES · UI HELPERS
+//  SETTINGS SCREEN · START / END / RESTART · INIT · STARS
+// ============================================================
+
+// ── SETTINGS ─────────────────────────────────────────────
+// gameSettings is read at setupGame() time — changing mid-game has no effect.
+const gameSettings={
+  mode:        'competition', // 'competition' | 'zen' | 'nocooldown' (easter egg)
+  sizeScale:   0.85,          // 0.65=small, 0.85=medium, 1.0=large
+  reverseMode: false,         // drop big → merge DOWN → two Asteroids = SINGULARITY!
+};
+
+// Base radii at large (1.0) scale. Asteroid (index 0) is always fixed.
+const BASE_RADII=[14,20,27,35,44,54,65,77,90,104,120];
+// Returns the actual radius for a tier given current settings.
+function getTierRadius(tier){
+  if(tier===0) return BASE_RADII[0]; // Asteroid never scales
+  return Math.round(BASE_RADII[tier]*gameSettings.sizeScale);
+}
+
+// ── PLANET DRAW FUNCTIONS ────────────────────────────────
+// Each drawFn(ctx, x, y, r) paints the planet at position (x,y) with radius r.
+// r is passed dynamically so the same function works at any scale.
+// Draws the comet body — icy blue nucleus with surface streaks.
+// The tail is drawn separately in the draw loop using the body's velocity.
+function drawComet(ctx,x,y,r,vx,vy){
+  ctx.save();ctx.translate(x,y);
+  // Tail: drawn opposite to velocity direction
+  const speed=Math.sqrt(vx*vx+vy*vy)||1;
+  const tx=-vx/speed, ty=-vy/speed; // unit vector pointing "behind"
+  const tailLen=r*6+speed*3;
+  // Multiple tail strands fanning slightly
+  [0,-0.18,0.18,-0.32,0.32].forEach((fan,fi)=>{
+    const fa=Math.atan2(ty,tx)+fan;
+    const fx=Math.cos(fa),fy=Math.sin(fa);
+    const grad=ctx.createLinearGradient(0,0,fx*tailLen,fy*tailLen);
+    const alpha=fi===0?0.7:0.35-Math.abs(fan)*0.5;
+    grad.addColorStop(0,`rgba(0,220,255,${alpha})`);
+    grad.addColorStop(0.4,`rgba(100,200,255,${alpha*0.5})`);
+    grad.addColorStop(1,'rgba(0,100,200,0)');
+    ctx.beginPath();
+    ctx.moveTo(0,0);
+    ctx.lineTo(fx*tailLen,fy*tailLen);
+    ctx.strokeStyle=grad;
+    ctx.lineWidth=fi===0?r*0.9:r*(0.5-Math.abs(fan)*0.6);
+    ctx.lineCap='round';ctx.stroke();
+  });
+  // Outer glow
+  const glow=ctx.createRadialGradient(0,0,r*.4,0,0,r*2.2);
+  glow.addColorStop(0,'rgba(0,240,255,0.35)');
+  glow.addColorStop(1,'transparent');
+  ctx.beginPath();ctx.arc(0,0,r*2.2,0,Math.PI*2);ctx.fillStyle=glow;ctx.fill();
+  // Nucleus
+  const nuc=ctx.createRadialGradient(-r*.25,-r*.25,r*.05,0,0,r);
+  nuc.addColorStop(0,'#ffffff');
+  nuc.addColorStop(0.3,'#aaf0ff');
+  nuc.addColorStop(0.7,'#00aadd');
+  nuc.addColorStop(1,'#005580');
+  ctx.beginPath();ctx.arc(0,0,r,0,Math.PI*2);ctx.fillStyle=nuc;ctx.fill();
+  // Surface ice streaks
+  ctx.save();ctx.globalAlpha=0.4;ctx.strokeStyle='#ffffff';ctx.lineWidth=r*.12;ctx.lineCap='round';
+  [[-.3,-.4,.2,.1],[.1,-.35,.35,-.05],[-.2,.15,.1,.4]].forEach(([x1,y1,x2,y2])=>{
+    ctx.beginPath();ctx.moveTo(x1*r,y1*r);ctx.lineTo(x2*r,y2*r);ctx.stroke();
+  });
+  ctx.restore();
+  ctx.restore();
+}
+
+// ── COMET PATH GEOMETRY ──────────────────────────────────
+// The player drags to define a line; the comet flies along that line all the
+// way across the screen (drag direction = flight direction). Extend the
+// dragged segment to the canvas bounds plus a margin, so the comet starts
+// and ends fully off-screen. Returns null if the drag is too short to define
+// a direction (a stray tap shouldn't fire).
+function cometPath(sx,sy,ex,ey){
+  const dx=ex-sx, dy=ey-sy;
+  const len=Math.hypot(dx,dy);
+  if(len<10)return null;
+  const ux=dx/len, uy=dy/len;
+  const M=40; // off-screen margin
+  // Slab method: clip the infinite line to the expanded canvas rectangle.
+  let tMin=-Infinity,tMax=Infinity;
+  if(Math.abs(ux)>1e-9){
+    const a=(-M-sx)/ux, b=(W+M-sx)/ux;
+    tMin=Math.max(tMin,Math.min(a,b));tMax=Math.min(tMax,Math.max(a,b));
+  }
+  if(Math.abs(uy)>1e-9){
+    const a=(-M-sy)/uy, b=(H+M-sy)/uy;
+    tMin=Math.max(tMin,Math.min(a,b));tMax=Math.min(tMax,Math.max(a,b));
+  }
+  return {x1:sx+ux*tMin, y1:sy+uy*tMin, x2:sx+ux*tMax, y2:sy+uy*tMax, ux, uy, dist:tMax-tMin};
+}
+// Distance from point (px,py) to the segment (x1,y1)-(x2,y2).
+function segDist(px,py,x1,y1,x2,y2){
+  const dx=x2-x1, dy=y2-y1;
+  const L2=dx*dx+dy*dy||1;
+  let t=((px-x1)*dx+(py-y1)*dy)/L2;
+  t=Math.max(0,Math.min(1,t));
+  return Math.hypot(px-(x1+dx*t),py-(y1+dy*t));
+}
+
+// Draws the aim preview while dragging: the full flight path across the
+// screen, an arrowhead showing direction, and a ring on every planet the
+// comet would zap.
+function drawCometAim(ctx,sx,sy,ex,ey){
+  const path=cometPath(sx,sy,ex,ey);
+  if(!path)return;
+  ctx.save();
+  // Full path, dashed
+  ctx.setLineDash([8,6]);
+  ctx.strokeStyle='rgba(0,238,255,0.5)';ctx.lineWidth=2;
+  ctx.beginPath();ctx.moveTo(path.x1,path.y1);ctx.lineTo(path.x2,path.y2);ctx.stroke();
+  // Arrowhead at the drag point showing flight direction
+  ctx.setLineDash([]);
+  const hLen=14,hAngle=0.4;
+  const angle=Math.atan2(path.uy,path.ux);
+  ctx.fillStyle='#00eeff';
+  ctx.beginPath();
+  ctx.moveTo(ex,ey);
+  ctx.lineTo(ex-hLen*Math.cos(angle-hAngle),ey-hLen*Math.sin(angle-hAngle));
+  ctx.lineTo(ex-hLen*Math.cos(angle+hAngle),ey-hLen*Math.sin(angle+hAngle));
+  ctx.closePath();ctx.fill();
+  // Ring every planet on the path — these are the ones the comet will zap
+  for(const b of Composite.allBodies(engine.world)){
+    if(b.tier===undefined||b===currentBody||b.merging)continue;
+    if(segDist(b.position.x,b.position.y,path.x1,path.y1,path.x2,path.y2)<b.circleRadius+COMET_RADIUS){
+      ctx.beginPath();ctx.arc(b.position.x,b.position.y,b.circleRadius+5,0,Math.PI*2);
+      ctx.strokeStyle='rgba(0,238,255,0.8)';ctx.lineWidth=2;ctx.stroke();
+    }
+  }
+  ctx.restore();
+}
+
+const PLANET_DRAWS=[
+  function drawAsteroid(ctx,x,y,r){
+    ctx.save();ctx.translate(x,y);
+    const g=ctx.createRadialGradient(-r*.2,-r*.2,r*.1,0,0,r);
+    g.addColorStop(0,'#c0bec8');g.addColorStop(1,'#5a5870');
+    ctx.beginPath();
+    for(let i=0;i<10;i++){const a=i/10*Math.PI*2,j=.75+Math.sin(i*7.3)*.25;
+      i===0?ctx.moveTo(Math.cos(a)*r*j,Math.sin(a)*r*j):ctx.lineTo(Math.cos(a)*r*j,Math.sin(a)*r*j);}
+    ctx.closePath();ctx.fillStyle=g;ctx.fill();
+    [[-.3,-.2,.25],[.2,.3,.2],[-.1,.35,.15]].forEach(([cx,cy,cr])=>{
+      ctx.beginPath();ctx.arc(cx*r,cy*r,cr*r,0,Math.PI*2);ctx.fillStyle='rgba(0,0,0,.25)';ctx.fill();});
+    ctx.restore();},
+  function drawMoon(ctx,x,y,r){
+    ctx.save();ctx.translate(x,y);
+    const h=ctx.createRadialGradient(0,0,r*.8,0,0,r*1.5);
+    h.addColorStop(0,'rgba(220,220,240,.2)');h.addColorStop(1,'transparent');
+    ctx.beginPath();ctx.arc(0,0,r*1.5,0,Math.PI*2);ctx.fillStyle=h;ctx.fill();
+    const g=ctx.createRadialGradient(-r*.3,-r*.3,r*.1,0,0,r);
+    g.addColorStop(0,'#f0f0f8');g.addColorStop(.6,'#c8c8d8');g.addColorStop(1,'#7a7a90');
+    ctx.beginPath();ctx.arc(0,0,r,0,Math.PI*2);ctx.fillStyle=g;ctx.fill();
+    [[-.25,-.3,.22],[.3,.1,.18],[-.1,.35,.14],[.15,-.4,.12]].forEach(([cx,cy,cr])=>{
+      ctx.beginPath();ctx.arc(cx*r,cy*r,cr*r,0,Math.PI*2);ctx.fillStyle='rgba(0,0,0,.2)';ctx.fill();});
+    ctx.restore();},
+  function drawMercury(ctx,x,y,r){
+    ctx.save();ctx.translate(x,y);
+    const g=ctx.createRadialGradient(-r*.3,-r*.3,r*.1,0,0,r);
+    g.addColorStop(0,'#d4b896');g.addColorStop(.5,'#a08060');g.addColorStop(1,'#5a3c28');
+    ctx.beginPath();ctx.arc(0,0,r,0,Math.PI*2);ctx.fillStyle=g;ctx.fill();
+    [[-.3,-.25,.2],[.25,.3,.18],[-.15,.3,.15],[.35,-.2,.16],[0,-.1,.12]].forEach(([cx,cy,cr])=>{
+      ctx.beginPath();ctx.arc(cx*r,cy*r,cr*r,0,Math.PI*2);ctx.fillStyle='rgba(0,0,0,.22)';ctx.fill();
+      ctx.beginPath();ctx.arc(cx*r-1,cy*r-1,cr*r*.5,0,Math.PI*2);ctx.fillStyle='rgba(255,255,255,.08)';ctx.fill();});
+    ctx.restore();},
+  function drawMars(ctx,x,y,r){
+    ctx.save();ctx.translate(x,y);
+    const g=ctx.createRadialGradient(-r*.3,-r*.3,r*.1,0,0,r);
+    g.addColorStop(0,'#ff9a6c');g.addColorStop(.5,'#d9542c');g.addColorStop(1,'#8b2a10');
+    ctx.beginPath();ctx.arc(0,0,r,0,Math.PI*2);ctx.fillStyle=g;ctx.fill();
+    ctx.save();ctx.beginPath();ctx.arc(0,-r*.65,r*.38,0,Math.PI*2);
+    ctx.fillStyle='rgba(255,255,255,.55)';ctx.fill();ctx.restore();
+    [[-.2,.1,.18],[.3,.2,.14],[-.1,.35,.12]].forEach(([cx,cy,cr])=>{
+      ctx.beginPath();ctx.arc(cx*r,cy*r,cr*r,0,Math.PI*2);ctx.fillStyle='rgba(100,30,10,.2)';ctx.fill();});
+    ctx.restore();},
+  function drawVenus(ctx,x,y,r){
+    ctx.save();ctx.translate(x,y);
+    const g=ctx.createRadialGradient(-r*.3,-r*.3,r*.1,0,0,r);
+    g.addColorStop(0,'#fff4c0');g.addColorStop(.5,'#e8c840');g.addColorStop(1,'#a07820');
+    ctx.beginPath();ctx.arc(0,0,r,0,Math.PI*2);ctx.fillStyle=g;ctx.fill();
+    ctx.save();ctx.globalAlpha=.3;ctx.strokeStyle='#fff8e0';ctx.lineWidth=r*.12;
+    for(let i=-2;i<=2;i++){ctx.beginPath();ctx.ellipse(0,i*r*.3,r*.9,r*.12,Math.sin(i)*.3,0,Math.PI*2);ctx.stroke();}
+    ctx.restore();ctx.restore();},
+  function drawEarth(ctx,x,y,r){
+    ctx.save();ctx.translate(x,y);
+    const g=ctx.createRadialGradient(-r*.3,-r*.3,r*.1,0,0,r);
+    g.addColorStop(0,'#5bb8ff');g.addColorStop(.6,'#1a6bbf');g.addColorStop(1,'#0a3060');
+    ctx.beginPath();ctx.arc(0,0,r,0,Math.PI*2);ctx.fillStyle=g;ctx.fill();
+    ctx.fillStyle='#3a9e40';
+    [[-r*.15,-r*.3,r*.42,r*.35],[r*.2,r*.1,r*.35,r*.28],[-r*.3,r*.25,r*.28,r*.22]].forEach(([lx,ly,rw,rh])=>{
+      ctx.beginPath();ctx.ellipse(lx,ly,rw,rh,.4,0,Math.PI*2);ctx.fill();});
+    ctx.fillStyle='rgba(255,255,255,.7)';
+    ctx.beginPath();ctx.arc(0,-r*.75,r*.28,0,Math.PI*2);ctx.fill();
+    ctx.beginPath();ctx.arc(0,r*.75,r*.2,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle='rgba(255,255,255,.45)';
+    [[-r*.1,-r*.1,r*.55,r*.12,.2],[r*.05,r*.3,r*.45,r*.1,-.15]].forEach(([cx,cy,cw,ch,a])=>{
+      ctx.beginPath();ctx.ellipse(cx,cy,cw,ch,a,0,Math.PI*2);ctx.fill();});
+    ctx.restore();},
+  function drawNeptune(ctx,x,y,r){
+    ctx.save();ctx.translate(x,y);
+    const g=ctx.createRadialGradient(-r*.3,-r*.3,r*.1,0,0,r);
+    g.addColorStop(0,'#7ab4ff');g.addColorStop(.4,'#2a5cdc');g.addColorStop(1,'#080e60');
+    ctx.beginPath();ctx.arc(0,0,r,0,Math.PI*2);ctx.fillStyle=g;ctx.fill();
+    ctx.save();ctx.globalAlpha=.35;ctx.strokeStyle='#a0c8ff';ctx.lineWidth=r*.1;
+    [-r*.3,r*.1,r*.4].forEach(by=>{ctx.beginPath();ctx.ellipse(0,by,r*.92,r*.1,-.15,0,Math.PI*2);ctx.stroke();});
+    ctx.globalAlpha=.5;ctx.fillStyle='#04093a';
+    ctx.beginPath();ctx.ellipse(r*.2,r*.15,r*.22,r*.14,.3,0,Math.PI*2);ctx.fill();
+    ctx.restore();ctx.restore();},
+  function drawUranus(ctx,x,y,r){
+    ctx.save();ctx.translate(x,y);
+    const g=ctx.createRadialGradient(-r*.3,-r*.3,r*.1,0,0,r);
+    g.addColorStop(0,'#c8f8f8');g.addColorStop(.5,'#4cc8c8');g.addColorStop(1,'#1a6060');
+    ctx.beginPath();ctx.arc(0,0,r,0,Math.PI*2);ctx.fillStyle=g;ctx.fill();
+    ctx.save();ctx.globalAlpha=.2;ctx.strokeStyle='#fff';ctx.lineWidth=r*.14;ctx.rotate(Math.PI/4);
+    [-r*.35,0,r*.35].forEach(bx=>{ctx.beginPath();ctx.moveTo(bx,-r);ctx.lineTo(bx,r);ctx.stroke();});
+    ctx.restore();ctx.restore();},
+  function drawSaturn(ctx,x,y,r){
+    ctx.save();ctx.translate(x,y);
+    ctx.save();ctx.scale(1,.3);ctx.globalAlpha=.6;
+    const rg=ctx.createLinearGradient(-r*1.9,0,r*1.9,0);
+    rg.addColorStop(0,'transparent');rg.addColorStop(.2,'#c8a860');rg.addColorStop(.38,'#e8d090');
+    rg.addColorStop(.5,'transparent');rg.addColorStop(.62,'#e8d090');rg.addColorStop(.8,'#c8a860');rg.addColorStop(1,'transparent');
+    ctx.beginPath();ctx.arc(0,0,r*1.85,Math.PI,Math.PI*2);ctx.strokeStyle=rg;ctx.lineWidth=r*.45;ctx.stroke();ctx.restore();
+    const g=ctx.createRadialGradient(-r*.3,-r*.3,r*.1,0,0,r);
+    g.addColorStop(0,'#fff0b0');g.addColorStop(.4,'#e8c850');g.addColorStop(.75,'#c09030');g.addColorStop(1,'#704010');
+    ctx.beginPath();ctx.arc(0,0,r,0,Math.PI*2);ctx.fillStyle=g;ctx.fill();
+    ctx.save();ctx.globalAlpha=.15;
+    [r*.15,r*.35,-r*.15].forEach(by=>{ctx.beginPath();ctx.ellipse(0,by,r*.95,r*.06,0,0,Math.PI*2);ctx.fillStyle='#804010';ctx.fill();});
+    ctx.restore();
+    ctx.save();ctx.scale(1,.3);ctx.globalAlpha=.75;
+    ctx.beginPath();ctx.arc(0,0,r*1.85,0,Math.PI);ctx.strokeStyle=rg;ctx.lineWidth=r*.45;ctx.stroke();ctx.restore();
+    ctx.restore();},
+  function drawJupiter(ctx,x,y,r){
+    ctx.save();ctx.translate(x,y);
+    const g=ctx.createRadialGradient(-r*.25,-r*.25,r*.1,0,0,r);
+    g.addColorStop(0,'#ffd8a0');g.addColorStop(.6,'#e09050');g.addColorStop(1,'#804020');
+    ctx.beginPath();ctx.arc(0,0,r,0,Math.PI*2);ctx.fillStyle=g;ctx.fill();
+    ctx.save();ctx.beginPath();ctx.arc(0,0,r,0,Math.PI*2);ctx.clip();
+    [{y:-r*.65,h:r*.12,c:'rgba(255,240,210,.5)'},{y:-r*.45,h:r*.1,c:'rgba(160,80,40,.45)'},
+     {y:-r*.25,h:r*.14,c:'rgba(255,220,170,.4)'},{y:-r*.05,h:r*.12,c:'rgba(180,90,40,.4)'},
+     {y:r*.12,h:r*.14,c:'rgba(255,230,180,.45)'},{y:r*.32,h:r*.1,c:'rgba(160,75,35,.4)'},
+     {y:r*.5,h:r*.12,c:'rgba(240,210,160,.4)'}].forEach(({y,h,c})=>{
+      ctx.beginPath();ctx.ellipse(0,y,r,h,0,0,Math.PI*2);ctx.fillStyle=c;ctx.fill();});
+    ctx.beginPath();ctx.ellipse(r*.25,r*.12,r*.22,r*.14,0,0,Math.PI*2);ctx.fillStyle='rgba(200,60,30,.75)';ctx.fill();
+    ctx.beginPath();ctx.ellipse(r*.25,r*.12,r*.14,r*.08,0,0,Math.PI*2);ctx.fillStyle='rgba(255,120,80,.5)';ctx.fill();
+    ctx.restore();ctx.restore();},
+  function drawSun(ctx,x,y,r){
+    ctx.save();ctx.translate(x,y);
+    const corona=ctx.createRadialGradient(0,0,r*.7,0,0,r*1.8);
+    corona.addColorStop(0,'rgba(255,200,50,.5)');corona.addColorStop(.5,'rgba(255,120,20,.2)');corona.addColorStop(1,'transparent');
+    ctx.beginPath();ctx.arc(0,0,r*1.8,0,Math.PI*2);ctx.fillStyle=corona;ctx.fill();
+    ctx.save();ctx.globalAlpha=.35;
+    for(let i=0;i<12;i++){ctx.save();ctx.rotate(i*(Math.PI*2/12));
+      ctx.beginPath();ctx.moveTo(r*.9,0);ctx.lineTo(r*1.5,0);
+      ctx.strokeStyle='#ffdd44';ctx.lineWidth=r*.12;ctx.lineCap='round';ctx.stroke();ctx.restore();}
+    ctx.restore();
+    const g=ctx.createRadialGradient(-r*.2,-r*.2,r*.1,0,0,r);
+    g.addColorStop(0,'#ffffc0');g.addColorStop(.3,'#ffe040');g.addColorStop(.7,'#ff8c00');g.addColorStop(1,'#c84000');
+    ctx.beginPath();ctx.arc(0,0,r,0,Math.PI*2);ctx.fillStyle=g;ctx.fill();
+    ctx.save();ctx.globalAlpha=.18;
+    for(let i=0;i<18;i++){
+      const gx=Math.cos(i*2.3)*.6*r,gy=Math.sin(i*1.7)*.6*r;
+      const gr=ctx.createRadialGradient(gx,gy,0,gx,gy,r*.2);
+      gr.addColorStop(0,'#fff060');gr.addColorStop(1,'transparent');
+      ctx.beginPath();ctx.arc(gx,gy,r*.2,0,Math.PI*2);ctx.fillStyle=gr;ctx.fill();}
+    ctx.restore();ctx.restore();}
+];
+
+// Build PLANETS array dynamically — radii recalculated each game from settings
+const PLANET_NAMES=['Asteroid','Moon','Mercury','Mars','Venus','Earth','Neptune','Uranus','Saturn','Jupiter','Sun'];
+function buildPlanets(){
+  return PLANET_NAMES.map((name,i)=>({
+    name,
+    radius: getTierRadius(i),
+    drawFn: PLANET_DRAWS[i],
+  }));
+}
+// PLANETS is set at game start
+let PLANETS=buildPlanets();
+
+// ── PLANET SPRITE CACHE ──────────────────────────────────
+// Pre-render each tier's planet once to an offscreen canvas so the draw loop can
+// blit it with drawImage() instead of re-running all its gradients/paths every
+// frame. Planets are static and unrotated, so the cached image is identical to
+// drawing live — just far cheaper. Rebuilt with the arena, since radius depends
+// on the size setting. b.circleRadius always equals PLANETS[b.tier].radius (only
+// makeBody sets it), so keying the cache by tier is exact.
+let planetSprites=[];
+let bgGradient=null;           // cached play-field background (was rebuilt every frame)
+const SPRITE_PAD=2.2;          // planets can paint beyond r (Saturn rings ~2.07r, Sun corona 1.8r)
+function buildPlanetSprites(){
+  planetSprites=PLANETS.map(p=>{
+    const half=Math.ceil(p.radius*SPRITE_PAD);
+    const cv=document.createElement('canvas');
+    cv.width=cv.height=half*2;
+    p.drawFn(cv.getContext('2d'),half,half,p.radius);
+    return {canvas:cv,half:half};
+  });
+}
+
+const GLOW=['#c0c0d0','#e0e0ff','#d4b896','#ff9966','#ffe090','#5bbfff','#7a92ff','#9af0ea','#fff0b8','#ffc285','#ffe840'];
+const MAX_DROP_TIER=4, DANGER_Y=95;
+// Game-over fires once a planet has sat above the line for DANGER_LIMIT frames
+// (~2s @60fps). Arming a magnet/comet grants a one-shot DANGER_GRACE_BONUS
+// (~3s) so the time spent aiming/selecting doesn't cost the player the game.
+const DANGER_LIMIT=120, DANGER_GRACE_BONUS=180;
+// Fixed logical playfield. Every device renders THIS exact field (in logical
+// units), CSS-scaled to fit the screen, so the competitive experience is
+// identical regardless of phone size. Frozen from a Galaxy Z Flip 5.
+const LOGICAL_W=344, LOGICAL_H=570;
+const SWEEP_CD_BASE=6000, DESTROY_CD_BASE=8000, UPGRADE_CD_BASE=12000;
+
+// ── STATE ────────────────────────────────────────────────
+let engine,physicsRunner,gameCanvas,gameCtx;
+let currentBody=null,currentTier=0,nextTier=0;
+let canDrop=true,score=0,gameRunning=false;
+let gameActive=false;        // a game exists (even while paused) — gates auto-save
+let dropX=0,W=0,H=0,animFrame=null,dangerTimer=0;
+// Extra danger-timer headroom (frames) granted while a magnet/comet is armed.
+// Always a flat SET to DANGER_GRACE_BONUS or 0 — never accumulated — so toggling
+// the button on/off can't stack time. See togglePowerup() and clearSelectMode().
+let dangerBonus=0;
+let sweepCd=0,destroyCd=0,upgradeCd=0,lastFrameTs=0;
+let activePowerup=null;
+
+// ── COMET STATE ────────────────────────────────────────────
+const COMET_CD_BASE = 7000;
+// Flight tuning: the comet crosses the screen at COMET_SPEED px/ms and zaps
+// any planet whose edge comes within COMET_RADIUS of its path.
+const COMET_SPEED  = 1.3;
+const COMET_RADIUS = 16;
+// Rather than scattering a pile of `let cometXxx` variables at the top level,
+// we group everything that belongs to the comet feature in one object.
+// Benefits: you can see at a glance what state the system tracks, and
+// resetting it on game-start is a single block rather than hunting for
+// scattered assignments.
+const comet = {
+  cd:     0,    // cooldown remaining in ms; 0 means the button is ready to use
+  drag:   null, // {startX,startY,curX,curY} while the path is being drawn; null otherwise
+  flight: null, // set by fireComet() while the comet crosses the screen; null otherwise
+};
+
+// ── MAGNET STATE ───────────────────────────────────────────
+const MAGNET_CD_BASE = 10000;
+const magnet = {
+  cd:           0,
+  firstBody:    null, // first planet tapped in the two-tap sequence
+  pullInterval: null, // setInterval handle while the tractor beam is running; null when idle
+  pullBodies:   null, // {a, b} — stored so the draw loop can render the beam between them
+};
+
+// ── QUAKE STATE ─────────────────────────────────────────────
+const QUAKE_CD_BASE  = 20000;
+const QUAKE_DURATION = 5000;
+const quake = {
+  cd:            0,
+  armed:         false, // button pressed, waiting for first grab
+  active:        false, // the shake timer is currently running
+  endTime:       0,     // wall-clock timestamp when active mode expires
+  endTimeout:    null,  // setTimeout handle for the auto-end
+  armedTimeout:  null,  // setTimeout handle to auto-cancel if player never grabs
+  touching:      false, // a pointer is currently pressed down on the canvas
+  offsetX:       0,     // current canvas translate-X (how far we've shaken it)
+  offsetY:       0,     // current canvas translate-Y
+  prevX:         0,     // offsetX from the previous frame — diff gives per-frame velocity
+  prevY:         0,     // offsetY from the previous frame
+  touchAnchorX:  0,     // pointer clientX at the start of the current grab
+  touchAnchorY:  0,
+  offsetAnchorX: 0,     // canvas offset at the start of the current grab
+  offsetAnchorY: 0,
+};
+
+// ── RAPID MODE ─────────────────────────────────────────────
+// When the rapid toggle is on AND the player holds the canvas,
+// we fire drops on a fixed interval at the current aim position.
+let rapidMode=false;            // tracks the toggle
+let rapidHeld=false;            // tracks whether canvas is being held
+let rapidInterval=null;         // setInterval handle
+const RAPID_INTERVAL_MS=200;    // ms between automatic drops
+
+function setRapidHeld(held){
+  rapidHeld=held;
+  if(rapidMode&&held&&gameRunning&&!activePowerup){
+    // Start the rapid-fire interval immediately
+    if(!rapidInterval){
+      dropCurrent(); // drop right away on press
+      rapidInterval=setInterval(()=>{
+        if(!rapidHeld||!rapidMode||!gameRunning){stopRapid();return;}
+        dropCurrent();
+      },RAPID_INTERVAL_MS);
+    }
+  } else {
+    stopRapid();
+  }
+}
+function stopRapid(){
+  clearInterval(rapidInterval);rapidInterval=null;
+}
+let popRings=[],particles=[],labels=[];
+
+// ── COMPETITION MODE ──────────────────────────────────────
+const COMPETITION_USES=5;
+let powerupUsesLeft=COMPETITION_USES;
+// Easter egg: toggle mode 10× within 30s → no-cooldown unlocked
+let eggCount=0,eggTimer=null,eggActive=false;
+
+// Cooldown values — 0 in competition mode (uses are the restriction) and easter-egg no-cooldown mode
+function SWEEP_CD(){return gameSettings.mode==='zen'?SWEEP_CD_BASE:0;}
+function DESTROY_CD(){return gameSettings.mode==='zen'?DESTROY_CD_BASE:0;}
+function UPGRADE_CD(){return gameSettings.mode==='zen'?UPGRADE_CD_BASE:0;}
+function COMET_CD(){return gameSettings.mode==='zen'?COMET_CD_BASE:0;}
+function MAGNET_CD(){return gameSettings.mode==='zen'?MAGNET_CD_BASE:0;}
+function QUAKE_CD(){return gameSettings.mode==='zen'?QUAKE_CD_BASE:0;}
+
+// ── AUDIO ─────────────────────────────────────────────────
+let audioCtx=null,bufDrop=null,bufMerge=null,soundEnabled=true;
+async function initAudio(){
+  if(audioCtx)return;
+  audioCtx=new(window.AudioContext||window.webkitAudioContext)();
+  try{
+    [bufDrop,bufMerge]=await Promise.all([
+      fetch('../sounds/drop.mp3').then(r=>r.arrayBuffer()).then(ab=>audioCtx.decodeAudioData(ab)),
+      fetch('../sounds/merge.mp3').then(r=>r.arrayBuffer()).then(ab=>audioCtx.decodeAudioData(ab)),
+    ]);
+  }catch(e){console.warn('Audio load failed:',e);}
+}
+function playBuf(buf,pitch=1,vol=1){
+  if(!audioCtx||!buf||!soundEnabled)return;
+  const src=audioCtx.createBufferSource(),g=audioCtx.createGain();
+  src.buffer=buf;src.playbackRate.value=pitch;g.gain.value=vol;
+  src.connect(g);g.connect(audioCtx.destination);src.start();
+}
+function playDrop(){playBuf(bufDrop,1.0,.9);}
+function playMerge(tier){playBuf(bufMerge,.85+(tier/PLANETS.length)*.75,1.0);}
+function playZap(){playBuf(bufDrop,0.6,.7);}
+function playEvolve(tier){playBuf(bufMerge,.9+(tier/PLANETS.length)*.5,1.1);}
+
+// ── EFFECTS ──────────────────────────────────────────────
+function addMergeEffects(x,y,tier,resultTier){
+  if(resultTier===undefined)resultTier=tier+1;
+  const col=GLOW[tier],r=PLANETS[tier].radius;
+  const rc=tier>=9?4:tier>=6?3:1;
+  for(let i=0;i<rc;i++)
+    popRings.push({x,y,startR:r*(.5+i*.4),endR:r*(3+i*1.8+(tier>=9?3:0)),
+      color:col,age:0,maxAge:tier>=9?95:tier>=6?72:50,thick:2.5-i*.4,delay:i*6});
+  const pc=tier>=9?40:tier>=6?22:8;
+  for(let i=0;i<pc;i++){
+    const a=(i/pc)*Math.PI*2+Math.random()*.3,sp=(2+Math.random()*4)*(tier>=9?2.5:tier>=6?1.8:1);
+    particles.push({x,y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp-(tier>=6?2:.5),
+      r:1.5+Math.random()*(tier>=9?4:2),color:col,age:0,maxAge:55+Math.floor(Math.random()*30)});
+  }
+  if(tier>=6)doFlash(col,tier>=9?.55:.25,tier>=9?600:350);
+  const _sl=(gameSettings.reverseMode?true:tier>=5)&&resultTier>=0&&resultTier<PLANETS.length;
+  if(_sl)labels.push({x,y:y-r,text:PLANETS[resultTier].name.toUpperCase(),color:GLOW[resultTier],age:0,maxAge:110});
+}
+function addZapEffects(x,y,tier){
+  const col='#ff5c8a',r=PLANETS[tier].radius;
+  for(let i=0;i<12;i++){
+    const a=(i/12)*Math.PI*2,d=r*1.5;
+    particles.push({x:x+Math.cos(a)*d,y:y+Math.sin(a)*d,
+      vx:-Math.cos(a)*(2+Math.random()*2),vy:-Math.sin(a)*(2+Math.random()*2),
+      r:2+Math.random()*2,color:col,age:0,maxAge:32});
+  }
+  popRings.push({x,y,startR:r*1.5,endR:r*.1,color:col,age:0,maxAge:36,thick:3,delay:0});
+  doFlash('#ff2060',.18,220);
+}
+function addEvolveEffects(x,y,tier){
+  const col=GLOW[Math.min(tier+1,PLANETS.length-1)],r=PLANETS[tier].radius;
+  for(let i=0;i<20;i++){
+    const a=(i/20)*Math.PI*2,sp=1.5+Math.random()*3;
+    particles.push({x,y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp-1.5,
+      r:1.5+Math.random()*2,color:col,age:0,maxAge:50+Math.floor(Math.random()*25)});
+  }
+  popRings.push({x,y,startR:r*.5,endR:r*2.8,color:col,age:0,maxAge:52,thick:2.5,delay:0});
+  doFlash(col,.2,320);
+}
+function addSunFireballEffect(x,y){
+  const r=PLANETS[PLANETS.length-1].radius;
+  const fireColors=['#ffffc0','#ffe040','#ff8c00','#ff5500','#ffcc00','#ff3300','#ffff80'];
+  for(let i=0;i<12;i++){
+    popRings.push({x,y,startR:r*(.1+i*.5),endR:r*(6+i*3.2),
+      color:fireColors[i%fireColors.length],age:0,maxAge:150,thick:4-i*.25,delay:i*7});
+  }
+  for(let i=0;i<200;i++){
+    const a=Math.random()*Math.PI*2,sp=2+Math.random()*18;
+    particles.push({x,y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp-6,
+      r:1.5+Math.random()*9,color:fireColors[Math.floor(Math.random()*fireColors.length)],
+      age:0,maxAge:110+Math.floor(Math.random()*80)});
+  }
+  doFlash('#ff8c00',0.85,1400);
+  labels.push({x,y:y-r*1.2,text:'☀ SUN BORN!',color:'#ffe040',age:0,maxAge:200,fontSize:32});
+}
+function addAsteroidCollapseEffect(x,y){
+  const dustColors=['#c0bec8','#8a8898','#5a5870','#d0cdd8','#ffffff','#a0a0b0'];
+  for(let i=0;i<7;i++){
+    popRings.push({x,y,startR:4+i*8,endR:70+i*30,
+      color:dustColors[i%dustColors.length],age:0,maxAge:115,thick:2.8,delay:i*5});
+  }
+  for(let i=0;i<120;i++){
+    const a=Math.random()*Math.PI*2,sp=1.5+Math.random()*8;
+    particles.push({x,y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp-2,
+      r:1+Math.random()*4,color:dustColors[Math.floor(Math.random()*dustColors.length)],
+      age:0,maxAge:85+Math.floor(Math.random()*55)});
+  }
+  doFlash('#a0a0c0',0.65,900);
+  labels.push({x,y,text:'✦ SINGULARITY!',color:'#d8d8f0',age:0,maxAge:215,fontSize:34});
+  labels.push({x,y:y+54,text:'+1000',color:'#b0b0cc',age:0,maxAge:175,fontSize:26});
+}
+function addSupernovaEffect(x,y){
+  const novaColors=['#ffffff','#ffffc0','#ffcc00','#ff8c00','#ff4400','#ff88ff','#a0c0ff','#ff5588','#00ffff','#ff00ff'];
+  for(let i=0;i<18;i++){
+    popRings.push({x,y,startR:4+i*12,endR:Math.min(W,H)*1.2+i*55,
+      color:novaColors[i%novaColors.length],age:0,maxAge:220,thick:5-i*.2,delay:i*5});
+  }
+  for(let i=0;i<400;i++){
+    const a=(i/400)*Math.PI*2+Math.random()*.4,sp=4+Math.random()*28;
+    particles.push({x,y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp-7,
+      r:1.5+Math.random()*10,color:novaColors[Math.floor(Math.random()*novaColors.length)],
+      age:0,maxAge:140+Math.floor(Math.random()*110)});
+  }
+  doFlash('#ffffff',0.98,1800);
+  labels.push({x,y:y,text:'SUPERNOVA!',color:'#ffffff',age:0,maxAge:260,fontSize:52});
+  labels.push({x,y:y+64,text:'+2000',color:'#ffe040',age:0,maxAge:180,fontSize:28});
+}
+function applyMagnet(a,b){
+  const dx0=b.position.x-a.position.x,dy0=b.position.y-a.position.y;
+  const dist0=Math.sqrt(dx0*dx0+dy0*dy0)||1;
+  // Gold particle burst along the line between them
+  for(let i=0;i<8;i++){
+    const frac=i/8,px=a.position.x+dx0*frac,py=a.position.y+dy0*frac;
+    const perp=[-dy0/dist0,dx0/dist0];
+    for(const side of[-1,1]){
+      particles.push({x:px,y:py,vx:perp[0]*side*(1+Math.random()*2),vy:perp[1]*side*(1+Math.random()*2),
+        r:2+Math.random()*2,color:'#ffd700',age:0,maxAge:22});
+    }
+  }
+  doFlash('#ffd700',0.25,250);
+  magnet.cd=MAGNET_CD();
+  // Pull runs until the bodies collide/merge — no timeout, but cancellable by the player.
+  const PULL_SPEED=14;
+  const pull=setInterval(()=>{
+    const allBodies=Composite.allBodies(engine.world);
+    if(!allBodies.includes(a)||!allBodies.includes(b)){
+      // Bodies merged naturally — clean up silently
+      clearInterval(pull);
+      if(magnet.pullInterval===pull){magnet.pullInterval=null; magnet.pullBodies=null; dangerTimer=0;} // pull "over" → fresh 2s grace
+      document.getElementById('select-hint').className='hidden';
+      return;
+    }
+    const dx=b.position.x-a.position.x,dy=b.position.y-a.position.y;
+    const dist=Math.sqrt(dx*dx+dy*dy)||1;
+    Body.setVelocity(a,{x:(dx/dist)*PULL_SPEED,y:(dy/dist)*PULL_SPEED});
+    Body.setVelocity(b,{x:(-dx/dist)*PULL_SPEED,y:(-dy/dist)*PULL_SPEED});
+  },50);
+  magnet.pullInterval=pull;
+  magnet.pullBodies={a,b};
+  // After 3s, if still running, show a subtle cancel hint
+  setTimeout(()=>{
+    if(magnet.pullInterval===pull){
+      const hint=document.getElementById('select-hint');
+      hint.textContent='Tap anywhere to cancel';
+      hint.className='cancel';
+    }
+  },3000);
+}
+function drawMagnetHalo(ctx,body,now){
+  const x=body.position.x,y=body.position.y,r=body.circleRadius;
+  const pulse=0.6+0.4*Math.sin(now*0.007);
+  // Soft outer glow
+  const grad=ctx.createRadialGradient(x,y,r*0.85,x,y,r*1.9);
+  grad.addColorStop(0,`rgba(0,255,110,${0.28*pulse})`);
+  grad.addColorStop(1,'rgba(0,255,110,0)');
+  ctx.save();ctx.beginPath();ctx.arc(x,y,r*1.9,0,Math.PI*2);ctx.fillStyle=grad;ctx.fill();ctx.restore();
+  // Crisp electric ring
+  ctx.save();
+  ctx.beginPath();ctx.arc(x,y,r+5,0,Math.PI*2);
+  ctx.strokeStyle=`rgba(0,255,130,${0.85*pulse})`;ctx.lineWidth=2;
+  ctx.shadowColor='#00ff80';ctx.shadowBlur=22;ctx.stroke();
+  ctx.restore();
+}
+function drawTractorBeam(ctx,a,b,now){
+  const ax=a.position.x,ay=a.position.y,bx=b.position.x,by=b.position.y;
+  const dx=bx-ax,dy=by-ay,dist=Math.sqrt(dx*dx+dy*dy)||1;
+  if(dist<=a.circleRadius+b.circleRadius)return;
+  const ux=dx/dist,uy=dy/dist,px=-uy,py=ux;
+  const x1=ax+ux*a.circleRadius,y1=ay+uy*a.circleRadius;
+  const x2=bx-ux*b.circleRadius,y2=by-uy*b.circleRadius;
+  const SEG=64;
+  // Build a wavy path: amp tapers to 0 at both ends so it meets the planet edges cleanly
+  function beamPath(amp,freq,phaseOff){
+    ctx.beginPath();
+    for(let i=0;i<=SEG;i++){
+      const frac=i/SEG;
+      const wx0=x1+(x2-x1)*frac, wy0=y1+(y2-y1)*frac;
+      const taper=Math.sin(frac*Math.PI); // 0 at edges, 1 at midpoint
+      const wave=Math.sin(frac*Math.PI*freq+now*0.006+phaseOff)*amp*taper;
+      if(i===0)ctx.moveTo(wx0+px*wave,wy0+py*wave);
+      else      ctx.lineTo(wx0+px*wave,wy0+py*wave);
+    }
+  }
+  // Wide soft glow pass
+  ctx.save();ctx.shadowColor='#00ff80';ctx.shadowBlur=35;
+  ctx.strokeStyle='rgba(0,255,100,0.12)';ctx.lineWidth=20;ctx.lineCap='round';
+  beamPath(9,5,0);ctx.stroke();ctx.restore();
+  // Three electric strands with different frequencies and phases
+  const strands=[
+    {amp:7,  freq:6,  phase:0,   color:'rgba(0,255,110,0.80)', w:2.5},
+    {amp:5,  freq:7.5,phase:2.1, color:'rgba(140,255,190,0.65)',w:1.5},
+    {amp:3.5,freq:5,  phase:4.2, color:'rgba(210,255,230,0.55)',w:1.2},
+  ];
+  for(const s of strands){
+    ctx.save();ctx.shadowColor='#00ff80';ctx.shadowBlur=14;
+    ctx.strokeStyle=s.color;ctx.lineWidth=s.w;ctx.lineCap='round';
+    beamPath(s.amp,s.freq,s.phase);ctx.stroke();ctx.restore();
+  }
+}
+function doFlash(color,alpha,ms){
+  const el=document.getElementById('flash');
+  el.style.background=color;el.style.transition='none';el.style.opacity=alpha;
+  setTimeout(()=>{el.style.transition=`opacity ${ms}ms ease-out`;el.style.opacity=0;},30);
+}
+
+// ── CANVAS FIT ───────────────────────────────────────────
+// Scale the fixed logical field (W×H) to fit the holder while preserving the
+// aspect ratio. Only CSS display size changes; the canvas backing store and all
+// game logic stay in logical units, so every device plays the identical field.
+function fitCanvas(){
+  if(!gameCanvas)return;
+  const holder=document.getElementById('canvas-holder');
+  const availW=holder.clientWidth-16, availH=holder.clientHeight-16;
+  const scale=Math.min(availW/W, availH/H);
+  gameCanvas.style.width =(W*scale)+'px';
+  gameCanvas.style.height=(H*scale)+'px';
+}
+// Convert a pointer's client coordinates into logical canvas coordinates,
+// accounting for the CSS scale (and any transform on #canvas-wrap, since
+// getBoundingClientRect reflects it).
+function canvasPoint(clientX,clientY){
+  const rect=gameCanvas.getBoundingClientRect();
+  return {
+    x:(clientX-rect.left)*gameCanvas.width /rect.width,
+    y:(clientY-rect.top )*gameCanvas.height/rect.height,
+  };
+}
+// Re-fit on viewport changes (orientation, browser-chrome show/hide, resize).
+window.addEventListener('resize',fitCanvas);
+window.addEventListener('orientationchange',()=>setTimeout(fitCanvas,300));
+if(window.visualViewport)visualViewport.addEventListener('resize',fitCanvas);
+
+// ── SETUP ────────────────────────────────────────────────
+// Builds the canvas, engine, walls and collision handler. Shared by a fresh
+// game (setupGame) and a resumed one (restoreGame) so the two can't drift apart.
+function buildArena(){
+  // Rebuild planets with current size setting
+  PLANETS=buildPlanets();
+  buildPlanetSprites();   // refresh the sprite cache for this game's planet size
+
+  const holder=document.getElementById('canvas-holder');
+  // The play area is a FIXED logical field shared by every device. Its pixel
+  // size never changes; we only scale the canvas via CSS to fit the screen,
+  // preserving the aspect ratio (letterboxed where the device doesn't match).
+  W=LOGICAL_W;H=LOGICAL_H;dropX=W/2;
+  const wrap=document.getElementById('canvas-wrap');
+  const old=document.getElementById('game-canvas');if(old)old.remove();
+  gameCanvas=document.createElement('canvas');
+  gameCanvas.id='game-canvas';gameCanvas.width=W;gameCanvas.height=H;
+  gameCanvas.style.borderRadius='18px';gameCanvas.style.display='block';
+  fitCanvas();
+  wrap.insertBefore(gameCanvas,wrap.firstChild);
+  gameCtx=gameCanvas.getContext('2d');
+  // Cache the play-field background gradient once (the context is fresh here).
+  bgGradient=gameCtx.createLinearGradient(0,0,0,H);
+  bgGradient.addColorStop(0,'rgba(20,12,50,.95)');bgGradient.addColorStop(1,'rgba(10,8,35,.98)');
+
+  engine=Engine.create();engine.gravity.y=1.2;
+  physicsRunner=Runner.create();Runner.run(physicsRunner,engine);
+
+  const wo={isStatic:true,friction:.4,restitution:0};
+  Composite.add(engine.world,[
+    Bodies.rectangle(W/2,H+20,W+80,40,wo),           // floor
+    Bodies.rectangle(-20,-H*2,40,H*8,wo),             // left wall — extends far above
+    Bodies.rectangle(W+20,-H*2,40,H*8,wo),            // right wall — extends far above
+    Bodies.rectangle(W/2,-H*3,W+80,40,wo),            // ceiling — well above play area
+  ]);
+
+  Events.on(engine,'collisionStart',e=>{
+    for(const pair of e.pairs){
+      const a=pair.bodyA,b=pair.bodyB;
+      if(a.tier!==undefined&&b.tier!==undefined&&a.tier===b.tier&&
+         !a.merging&&!b.merging&&a!==currentBody&&b!==currentBody)
+        mergePlanets(a,b);
+    }
+  });
+}
+function setupGame(){
+  buildArena();
+  clearSave();   // starting fresh — drop any resumable game
+
+  popRings=[];particles=[];labels=[];
+  score=0;updateScore();dangerTimer=0;dangerBonus=0;lastFrameTs=0;
+  sweepCd=0;destroyCd=0;upgradeCd=0;comet.cd=0;magnet.cd=0;quake.cd=0;comet.drag=null;comet.flight=null;magnet.firstBody=null;
+  cancelMagnetPull();magnet.pullBodies=null;
+  endQuake(false);
+  activePowerup=null;clearSelectMode();updateAllButtons();stopRapid();rapidHeld=false;
+  document.getElementById('canvas-wrap').classList.remove('zoomed-out','select-mode','select-destroy','select-upgrade');
+  buildEvolutionGuide();
+  // Mode-specific UI
+  powerupUsesLeft=COMPETITION_USES;
+  updateChargeDisplay();
+  const _charges=document.getElementById('comp-charges');
+  if(_charges)_charges.classList.toggle('hidden',gameSettings.mode!=='competition');
+  const _revBadge=document.getElementById('reverse-badge');
+  if(_revBadge)_revBadge.classList.toggle('hidden',!gameSettings.reverseMode);
+  document.querySelector('#upgrade-btn .pw-icon').textContent=gameSettings.reverseMode?'⬇':'⬆';
+  document.querySelector('#upgrade-btn .pw-label').textContent=gameSettings.reverseMode?'SHRINK':'EVOLVE';
+  nextTier=rndT();spawnCurrent();gameRunning=true;gameActive=true;
+  cancelAnimationFrame(animFrame);drawLoop();
+}
+
+// ── DRAW LOOP ─────────────────────────────────────────────
+function drawLoop(){
+  animFrame=requestAnimationFrame(drawLoop);
+  if(!gameRunning)return;
+  const now=Date.now();
+  const dt=lastFrameTs?Math.min(now-lastFrameTs,100):16;
+  lastFrameTs=now;
+  if(sweepCd>0)sweepCd=Math.max(0,sweepCd-dt);
+  if(destroyCd>0)destroyCd=Math.max(0,destroyCd-dt);
+  if(upgradeCd>0)upgradeCd=Math.max(0,upgradeCd-dt);
+  if(comet.cd>0)comet.cd=Math.max(0,comet.cd-dt);
+  if(magnet.cd>0)magnet.cd=Math.max(0,magnet.cd-dt);
+  if(quake.cd>0)quake.cd=Math.max(0,quake.cd-dt);
+  updateAllButtons();
+  if(gameActive&&now-_lastSave>2000)snapshotGame();   // heartbeat: catches powerups & settling even with no drop/merge
+
+  const bodies=Composite.allBodies(engine.world);
+  let danger=false;
+  // Comet (aiming AND flight) and magnet (while the tractor beam pulls) freeze
+  // the danger timer, same as quake. During flight the physics runner is
+  // stopped, so a settled planet above the line would otherwise keep ticking
+  // the timer while the player can't do anything about it.
+  const cometAiming=comet.drag!==null;
+  const cometFlying=comet.flight!==null;
+  const magnetActive=magnet.firstBody!==null||magnet.pullBodies!==null;
+  if(!quake.armed&&!quake.active&&!cometAiming&&!cometFlying&&!magnetActive){
+    for(const b of bodies){
+      if(b.tier===undefined||b===currentBody||b.isDropping)continue;
+      if(b.position.y>=0&&b.position.y-b.circleRadius<DANGER_Y-PLANETS[3].radius*1.5&&Math.abs(b.velocity.y)<0.5){
+        danger=true;dangerTimer++;if(dangerTimer>DANGER_LIMIT+dangerBonus){endGame();return;}
+      }
+    }
+  }
+  // Reset only when there's no danger AND we're not mid-freeze, so the timer
+  // truly holds its value while a powerup is firing.
+  if(!danger&&!cometAiming&&!cometFlying&&!magnetActive)dangerTimer=0;
+
+  gameCtx.clearRect(0,0,W,H);
+  gameCtx.save();gameCtx.beginPath();rrect(gameCtx,0,0,W,H,18);
+  gameCtx.fillStyle=bgGradient;gameCtx.fill();gameCtx.restore();
+
+  gameCtx.save();gameCtx.setLineDash([10,10]);
+  gameCtx.strokeStyle=danger?`rgba(255,70,100,${.5+.4*Math.sin(now/150)})`:'rgba(255,70,100,.22)';
+  gameCtx.lineWidth=1.5;gameCtx.beginPath();gameCtx.moveTo(0,DANGER_Y);gameCtx.lineTo(W,DANGER_Y);
+  gameCtx.stroke();gameCtx.restore();
+
+  if(currentBody&&canDrop&&!activePowerup&&!quake.armed&&!quake.active){
+    gameCtx.save();gameCtx.setLineDash([4,8]);gameCtx.strokeStyle='rgba(255,255,255,.12)';gameCtx.lineWidth=1;
+    gameCtx.beginPath();
+    gameCtx.moveTo(currentBody.position.x,currentBody.position.y+currentBody.circleRadius);
+    gameCtx.lineTo(currentBody.position.x,H);gameCtx.stroke();gameCtx.restore();
+  }
+
+  // Apply inertial forces from canvas movement every frame
+  if(quake.active)applyQuakeInertia();
+
+  for(const b of bodies){
+    if(b.tier===undefined)continue;
+    const sp=planetSprites[b.tier];
+    if(sp)gameCtx.drawImage(sp.canvas,b.position.x-sp.half,b.position.y-sp.half);
+    else PLANETS[b.tier].drawFn(gameCtx,b.position.x,b.position.y,b.circleRadius);
+  }
+  // Draw magnet tractor beam and halos while pull is active
+  if(magnet.pullBodies){
+    const {a,b}=magnet.pullBodies;
+    drawMagnetHalo(gameCtx,a,now);
+    drawMagnetHalo(gameCtx,b,now);
+    drawTractorBeam(gameCtx,a,b,now);
+  }
+  // Draw magnet first-selection glow ring
+  if(magnet.firstBody&&activePowerup==='magnet'&&!magnet.firstBody.merging){
+    gameCtx.save();
+    gameCtx.globalAlpha=0.5+0.4*Math.sin(now/180);
+    gameCtx.strokeStyle='#ffd700';gameCtx.lineWidth=3;
+    gameCtx.shadowColor='#ffd700';gameCtx.shadowBlur=18;
+    gameCtx.beginPath();gameCtx.arc(magnet.firstBody.position.x,magnet.firstBody.position.y,magnet.firstBody.circleRadius+7,0,Math.PI*2);
+    gameCtx.stroke();gameCtx.restore();
+  }
+  // ── COMET FLIGHT ── physics is paused; the comet sweeps its line and zaps
+  // everything it touches. The hit test uses the swept segment (previous →
+  // new position) so a dt spike can't tunnel the comet past a planet.
+  if(comet.flight){
+    const f=comet.flight;
+    const px=f.x, py=f.y;
+    f.traveled=Math.min(f.traveled+COMET_SPEED*dt,f.dist);
+    f.x=f.x1+f.ux*f.traveled; f.y=f.y1+f.uy*f.traveled;
+    for(const b of bodies){
+      if(b.tier===undefined||b===currentBody||b.merging)continue;
+      if(segDist(b.position.x,b.position.y,px,py,f.x,f.y)<b.circleRadius+COMET_RADIUS){
+        f.zapped++;zapBody(b);
+      }
+    }
+    // Afterglow along the traversed part of the path
+    const glow=gameCtx.createLinearGradient(f.x1,f.y1,f.x,f.y);
+    glow.addColorStop(0,'rgba(0,238,255,0)');
+    glow.addColorStop(1,'rgba(0,238,255,0.55)');
+    gameCtx.save();
+    gameCtx.strokeStyle=glow;gameCtx.lineWidth=3;gameCtx.lineCap='round';
+    gameCtx.shadowColor='#00eeff';gameCtx.shadowBlur=12;
+    gameCtx.beginPath();gameCtx.moveTo(f.x1,f.y1);gameCtx.lineTo(f.x,f.y);gameCtx.stroke();
+    gameCtx.restore();
+    // The velocity args only shape the tail (direction + length)
+    drawComet(gameCtx,f.x,f.y,COMET_RADIUS,f.ux*COMET_SPEED*16,f.uy*COMET_SPEED*16);
+    if(f.traveled>=f.dist){
+      // Flight over — restart the world and hand back a fresh 2s danger grace.
+      comet.flight=null;
+      if(f.zapped===0)refundCompetitionCharge();   // whiffed — give the charge back
+      dangerTimer=0;
+      Runner.run(physicsRunner,engine);
+    }
+  }
+  // Draw path preview while dragging
+  if(comet.drag){
+    drawCometAim(gameCtx,comet.drag.startX,comet.drag.startY,comet.drag.curX,comet.drag.curY);
+  }
+
+  popRings=popRings.filter(p=>p.age<p.maxAge+p.delay);
+  for(const p of popRings){
+    if(p.age<p.delay){p.age++;continue;}
+    const t=(p.age-p.delay)/p.maxAge,radius=p.startR+(p.endR-p.startR)*t;
+    gameCtx.save();gameCtx.globalAlpha=(1-t)*.75;gameCtx.strokeStyle=p.color;
+    gameCtx.lineWidth=Math.max(.5,p.thick*(1-t));gameCtx.beginPath();
+    gameCtx.arc(p.x,p.y,radius,0,Math.PI*2);gameCtx.stroke();gameCtx.restore();p.age++;
+  }
+  particles=particles.filter(p=>p.age<p.maxAge);
+  for(const p of particles){
+    const t=p.age/p.maxAge;p.x+=p.vx;p.y+=p.vy;p.vy+=0.12;p.vx*=0.97;
+    gameCtx.save();gameCtx.globalAlpha=(1-t)*.9;gameCtx.fillStyle=p.color;
+    gameCtx.beginPath();gameCtx.arc(p.x,p.y,p.r*(1-t*.5),0,Math.PI*2);gameCtx.fill();gameCtx.restore();p.age++;
+  }
+  labels=labels.filter(l=>l.age<l.maxAge);
+  for(const l of labels){
+    const t=l.age/l.maxAge;
+    const baseFontSize=l.fontSize||16;
+    const growAmount=l.fontSize?10:4;
+    const riseAmount=l.fontSize?70:40;
+    gameCtx.save();gameCtx.globalAlpha=(1-t);gameCtx.fillStyle=l.color;
+    gameCtx.font=`700 ${baseFontSize+t*growAmount}px 'Fredoka',sans-serif`;gameCtx.textAlign='center';
+    gameCtx.shadowColor=l.color;gameCtx.shadowBlur=l.fontSize?24:12;
+    gameCtx.fillText(l.text,l.x,l.y-t*riseAmount);gameCtx.restore();l.age++;
+  }
+
+  // ── QUAKE VISUALS ────────────────────────────────────────
+  if(quake.armed){
+    const p=0.5+0.5*Math.sin(now/220);
+    gameCtx.save();
+    gameCtx.fillStyle=`rgba(255,160,60,${0.7+p*0.3})`;
+    gameCtx.font=`700 22px 'Fredoka',sans-serif`;
+    gameCtx.textAlign='center';gameCtx.textBaseline='middle';
+    gameCtx.shadowColor='#ff6600';gameCtx.shadowBlur=16;
+    gameCtx.fillText('✊ GRAB & SHAKE',W/2,H/2);
+    gameCtx.restore();
+  }
+
+  if(quake.active){
+    const remaining=Math.max(0,quake.endTime-now);
+    const secs=Math.ceil(remaining/1000);
+    const frac=remaining/QUAKE_DURATION;
+    const cx=W/2, cy=50, ringR=24;
+    const pulse=0.75+0.25*Math.sin(now/120);
+    gameCtx.save();
+    gameCtx.strokeStyle='rgba(255,80,0,0.2)';
+    gameCtx.lineWidth=5;
+    gameCtx.beginPath();gameCtx.arc(cx,cy,ringR,0,Math.PI*2);gameCtx.stroke();
+    gameCtx.strokeStyle=`rgba(255,${80+Math.round(frac*120)},0,${pulse})`;
+    gameCtx.shadowColor='#ff4400';gameCtx.shadowBlur=12;
+    gameCtx.lineWidth=5;gameCtx.lineCap='round';
+    gameCtx.beginPath();gameCtx.arc(cx,cy,ringR,-Math.PI/2,-Math.PI/2+Math.PI*2*frac);gameCtx.stroke();
+    gameCtx.fillStyle=`rgba(255,${120+Math.round(frac*135)},80,${pulse})`;
+    gameCtx.font=`700 20px 'Fredoka',sans-serif`;
+    gameCtx.textAlign='center';gameCtx.textBaseline='middle';
+    gameCtx.shadowBlur=8;
+    gameCtx.fillText(secs,cx,cy);
+    gameCtx.restore();
+  }
+}
+
+// ── BODIES ────────────────────────────────────────────────
+function makeBody(tier,x,y,isStatic=false){
+  const r=PLANETS[tier].radius;
+  const b=Bodies.circle(x,y,r,{restitution:.3,friction:.45,frictionAir:.004,isStatic});
+  b.tier=tier;b.merging=false;b.isDropping=false;b.circleRadius=r;
+  return b;
+}
+
+// ── SPAWN / DROP / MERGE ──────────────────────────────────
+function spawnCurrent(){
+  currentTier=nextTier;nextTier=rndT();updateNextPreview();
+  currentBody=makeBody(currentTier,dropX,50,true);
+  Composite.add(engine.world,currentBody);canDrop=true;
+}
+function dropCurrent(){
+  if(!currentBody||!canDrop||!gameRunning||quake.armed||quake.active||activePowerup)return;
+  canDrop=false;
+  // Reset any residual velocity from position-dragging so balls drop straight
+  Body.setVelocity(currentBody,{x:0,y:0});
+  Body.setAngularVelocity(currentBody,0);
+  Body.setStatic(currentBody,false);currentBody.isDropping=true;
+  playDrop();
+  const d=currentBody;currentBody=null;
+  setTimeout(()=>{if(d)d.isDropping=false;},700);
+  // Rapid mode: spawn next ball immediately so canDrop resets without delay.
+  // Normal mode: short delay so the drop animation has a moment to start.
+  if(rapidMode){
+    if(gameRunning)spawnCurrent();
+  } else {
+    setTimeout(()=>{if(gameRunning)spawnCurrent();},600);
+  }
+  snapshotGame();   // persist immediately — no debounce gap
+}
+function mergePlanets(a,b){
+  a.merging=true;b.merging=true;
+  const tier=a.tier,x=(a.position.x+b.position.x)/2,y=(a.position.y+b.position.y)/2;
+  Composite.remove(engine.world,a);Composite.remove(engine.world,b);
+  score+=(tier+1)*10;updateScore();
+  if(gameSettings.reverseMode){
+    playMerge(tier);
+    if(tier>0){
+      addMergeEffects(x,y,tier,tier-1);
+      const m=makeBody(tier-1,x,y);Composite.add(engine.world,m);
+      // Push force scaled by result body's mass (∝ r²) so lighter planets don't
+      // rocket higher than heavier ones. Tier < 3 (→ Moon or Asteroid) is corrected
+      // to match Mercury's reference velocity; larger tiers keep the original formula.
+      const _rRes=PLANETS[tier-1].radius,_rRef=PLANETS[2].radius;
+      const _pushF=tier<3?0.12*(_rRes*_rRes)/(_rRef*_rRef):0.015*(PLANETS.length-tier);
+      Body.applyForce(m,m.position,{x:0,y:-_pushF});
+    } else {
+      // Two Asteroids → SINGULARITY!
+      addAsteroidCollapseEffect(x,y);
+      score+=1000;updateScore();
+    }
+  } else {
+    playMerge(tier);addMergeEffects(x,y,tier);
+    if(tier<PLANETS.length-1){
+      const m=makeBody(tier+1,x,y);Composite.add(engine.world,m);
+      Body.applyForce(m,m.position,{x:0,y:-0.015*(tier+1)});
+      if(tier+1===PLANETS.length-1){score+=500;updateScore();addSunFireballEffect(x,y);}
+    } else {
+      // Two Suns merged — SUPERNOVA!
+      addSupernovaEffect(x,y);
+      score+=2000;updateScore();
+    }
+  }
+  snapshotGame();   // persist immediately — no debounce gap
+}
+
+// ── FIND BODY AT POINT ────────────────────────────────────
+function findBodyAt(canvasX,canvasY){
+  const bodies=Composite.allBodies(engine.world);
+  let best=null,bestDist=Infinity;
+  for(const b of bodies){
+    if(b.tier===undefined||b===currentBody)continue;
+    const dx=b.position.x-canvasX,dy=b.position.y-canvasY;
+    const dist=Math.sqrt(dx*dx+dy*dy);
+    if(dist<b.circleRadius+8&&dist<bestDist){best=b;bestDist=dist;}
+  }
+  return best;
+}
+
+// ── COMET FIRE ───────────────────────────────────────────────
+// The comet is NOT a physics body: the world is frozen (Runner stopped) while
+// it sweeps the player's line, and the draw loop advances it and zaps every
+// planet it touches. The runner restarts when the flight completes — see the
+// COMET FLIGHT block in the draw loop.
+function fireComet(path){
+  comet.flight={x:path.x1, y:path.y1, x1:path.x1, y1:path.y1,
+    ux:path.ux, uy:path.uy, traveled:0, dist:path.dist, zapped:0};
+  Runner.stop(physicsRunner);
+  comet.cd=COMET_CD();
+  doFlash('#00eeff',0.15,200);
+}
+
+// ── ZAP / EVOLVE ─────────────────────────────────────────
+function zapBody(b){
+  const tier=b.tier,x=b.position.x,y=b.position.y;
+  Composite.remove(engine.world,b);addZapEffects(x,y,tier);playZap();
+}
+function evolveBody(b){
+  const tier=b.tier,x=b.position.x,y=b.position.y,vel={x:b.velocity.x,y:b.velocity.y};
+  Composite.remove(engine.world,b);
+  if(gameSettings.reverseMode){
+    // In reverse mode SHRINK = devolve one tier down
+    if(tier<=0){score+=200;updateScore();addZapEffects(x,y,0);playZap();}
+    else{
+      const u=makeBody(tier-1,x,y);Composite.add(engine.world,u);Body.setVelocity(u,vel);
+      score+=(PLANETS.length-tier)*5;updateScore();addEvolveEffects(x,y,tier);playEvolve(tier);
+    }
+  } else {
+    if(tier>=PLANETS.length-1){score+=500;updateScore();addMergeEffects(x,y,tier);playMerge(tier);}
+    else{
+      const u=makeBody(tier+1,x,y);Composite.add(engine.world,u);Body.setVelocity(u,vel);
+      score+=(tier+2)*5;updateScore();addEvolveEffects(x,y,tier);playEvolve(tier);
+    }
+  }
+}
+
+// ── SELECT MODE ───────────────────────────────────────────
+function handleSelectTap(clientX,clientY){
+  const p=canvasPoint(clientX,clientY);
+  const x=p.x,y=p.y;
+  const b=findBodyAt(x,y);
+  if(activePowerup==='magnet'){
+    if(!b){clearSelectMode();return;}
+    if(!magnet.firstBody){
+      // First tap — store and prompt for second
+      magnet.firstBody=b;
+      const hint=document.getElementById('select-hint');
+      hint.textContent='NOW TAP ANOTHER '+PLANETS[b.tier].name.toUpperCase();hint.className='magnet';
+      return;
+    }
+    // Second tap
+    if(b===magnet.firstBody){clearSelectMode();return;} // tapped same ball again = cancel
+    if(b.tier!==magnet.firstBody.tier){
+      // Wrong type: flash hint and stay in mode
+      const hint=document.getElementById('select-hint');
+      hint.textContent='MUST BE SAME TYPE!';
+      setTimeout(()=>{
+        if(activePowerup==='magnet'&&magnet.firstBody)
+          hint.textContent='NOW TAP ANOTHER '+PLANETS[magnet.firstBody.tier].name.toUpperCase();
+      },700);
+      return;
+    }
+    // Valid — apply magnet force. Capture firstBody first: spending the last
+    // charge triggers clearSelectMode() inside useCompetitionCharge(), which
+    // nulls magnet.firstBody before we'd otherwise read it.
+    const first=magnet.firstBody;
+    if(!useCompetitionCharge()){clearSelectMode();return;}
+    applyMagnet(first,b);
+    clearSelectMode();
+    return;
+  }
+  if(!b){clearSelectMode();return;}
+  if(activePowerup==='destroy'){if(!useCompetitionCharge())return;destroyCd=DESTROY_CD();zapBody(b);}
+  else if(activePowerup==='upgrade'){if(!useCompetitionCharge())return;upgradeCd=UPGRADE_CD();evolveBody(b);}
+  clearSelectMode();
+}
+function clearSelectMode(){
+  activePowerup=null;
+  // Exiting select mode ends the pending grace buffer. On a genuine cancel this
+  // reverts the +3s with the danger timer left untouched (so backing out drops
+  // you back into jeopardy — no free time). Completion paths (comet flight end,
+  // magnet pull end) separately reset dangerTimer to a fresh 2s.
+  dangerBonus=0;
+  // Reset any per-powerup state that was being tracked.
+  // Putting these here (rather than scattered in each button handler) means
+  // there's ONE place that defines "what does cancelling a select-mode powerup
+  // look like" — easier to keep consistent.
+  magnet.firstBody=null;
+  comet.drag=null;
+  const wrap=document.getElementById('canvas-wrap');
+  wrap.classList.remove('select-mode','select-destroy','select-upgrade','select-magnet','select-comet');
+  const hint=document.getElementById('select-hint');hint.classList.add('hidden');hint.className='hidden';
+  document.getElementById('destroy-btn').classList.remove('selected');
+  document.getElementById('upgrade-btn').classList.remove('selected');
+  document.getElementById('comet-btn').classList.remove('selected');
+  document.getElementById('magnet-btn').classList.remove('selected');
+}
+function cancelMagnetPull(){
+  if(magnet.pullInterval===null)return;
+  clearInterval(magnet.pullInterval);
+  magnet.pullInterval=null;
+  magnet.pullBodies=null;
+  dangerTimer=0; // pull "over" → fresh 2s grace
+  magnet.cd=0; // refund — it didn't work
+  refundCompetitionCharge();
+  document.getElementById('select-hint').className='hidden';
+}
+
+// ── QUAKE POWERUP ─────────────────────────────────────────
+function quakeSetTransform(transition){
+  const wrap=document.getElementById('canvas-wrap');
+  wrap.style.transition=transition||'none';
+  wrap.style.transform=`scale(0.88) translate(${quake.offsetX}px,${quake.offsetY}px)`;
+}
+
+function endQuake(startCooldown){
+  if(quake.endTimeout){clearTimeout(quake.endTimeout);quake.endTimeout=null;}
+  if(quake.armedTimeout){clearTimeout(quake.armedTimeout);quake.armedTimeout=null;}
+  quake.armed=false;
+  quake.active=false;
+  quake.touching=false;
+  quake.offsetX=0;quake.offsetY=0;quake.prevX=0;quake.prevY=0;
+  // Animate canvas back to normal (zoom in + center)
+  const wrap=document.getElementById('canvas-wrap');
+  wrap.style.transition='transform 0.4s cubic-bezier(.25,.8,.25,1)';
+  wrap.style.transform='';
+  document.getElementById('quake-btn').classList.remove('quake-active');
+  if(startCooldown)quake.cd=QUAKE_CD();
+}
+
+function startQuakeTimer(clientX,clientY){
+  if(quake.armedTimeout){clearTimeout(quake.armedTimeout);quake.armedTimeout=null;}
+  quake.armed=false;
+  quake.active=true;
+  quake.endTime=Date.now()+QUAKE_DURATION;
+  quake.endTimeout=setTimeout(()=>endQuake(true),QUAKE_DURATION);
+  // Treat initial touch as first drag anchor (offset starts at 0,0)
+  quake.touchAnchorX=clientX;quake.touchAnchorY=clientY;
+  quake.offsetAnchorX=0;quake.offsetAnchorY=0;
+  quake.touching=true;
+  doFlash('#ff4400',0.18,280);
+}
+
+function activateQuake(){
+  if(!gameRunning||quake.cd>0||quake.armed||quake.active)return;
+  if(!useCompetitionCharge())return;
+  quake.armed=true;
+  quake.offsetX=0;quake.offsetY=0;quake.prevX=0;quake.prevY=0;
+  document.getElementById('quake-btn').classList.add('quake-active');
+  const wrap=document.getElementById('canvas-wrap');
+  wrap.style.transition='transform 0.3s ease';
+  wrap.style.transform='scale(0.88) translate(0px,0px)';
+  // Cancel armed state after 10s if player never grabs
+  quake.armedTimeout=setTimeout(()=>endQuake(true),10000);
+}
+
+// Called in draw loop every frame while quake.active
+// Computes per-frame canvas velocity → applies opposite inertial force to balls
+function applyQuakeInertia(){
+  const velX=quake.offsetX-quake.prevX;
+  const velY=quake.offsetY-quake.prevY;
+  quake.prevX=quake.offsetX;
+  quake.prevY=quake.offsetY;
+  if(Math.abs(velX)<0.5&&Math.abs(velY)<0.5)return;
+  // 50/50 blend of original (r/20, spread=8.6×) and equalized (0.133*b.mass, spread=1×).
+  // Tier-10 acceleration unchanged; smaller tiers have ~half their original excess motion.
+  const SCALE=0.001;
+  Composite.allBodies(engine.world).forEach(b=>{
+    if(b.isStatic||b.tier===undefined||b===currentBody)return;
+    const mult=0.5*(b.circleRadius/20)+0.5*(0.133*b.mass);
+    Body.applyForce(b,b.position,{
+      x:-velX*SCALE*mult,
+      y:-velY*SCALE*mult,
+    });
+  });
+}
+
+// ── SWEEP (PURGE) ─────────────────────────────────────────
+function activateSweep(){
+  if(sweepCd>0||!gameRunning)return;
+  const targets=Composite.allBodies(engine.world).filter(b=>
+    b.tier!==undefined&&b!==currentBody&&!b.merging&&
+    (gameSettings.reverseMode?b.tier>=PLANETS.length-3:b.tier<=2)
+  );
+  if(targets.length===0)return; // nothing to purge — don't spend CD
+  if(!useCompetitionCharge())return;
+  sweepCd=SWEEP_CD();
+  targets.forEach(b=>{
+    const x=b.position.x,y=b.position.y,tier=b.tier;
+    Composite.remove(engine.world,b);
+    addZapEffects(x,y,tier);
+  });
+  playZap();
+  doFlash('#c060ff',.28,400);
+  labels.push({x:W/2,y:H/2-60,text:'SWEEP!',color:'#c060ff',age:0,maxAge:90,fontSize:28});
+}
+
+// ── POWERUP UI ────────────────────────────────────────────
+// Returns true and consumes one charge (competition mode), or just returns true (other modes).
+function useCompetitionCharge(){
+  if(gameSettings.mode!=='competition')return true;
+  if(powerupUsesLeft<=0)return false;
+  powerupUsesLeft--;
+  updateChargeDisplay();
+  if(powerupUsesLeft<=0)clearSelectMode();
+  return true;
+}
+// Give back one charge (competition mode only), capped at the per-game max.
+// Used when a powerup is consumed but produces no effect — e.g. a comet whose
+// path didn't touch a single planet.
+function refundCompetitionCharge(){
+  if(gameSettings.mode!=='competition')return;
+  if(powerupUsesLeft<COMPETITION_USES){powerupUsesLeft++;updateChargeDisplay();}
+}
+function updateChargeDisplay(){
+  const el=document.getElementById('charge-pips');if(!el)return;
+  el.innerHTML='';
+  for(let i=0;i<COMPETITION_USES;i++){
+    const s=document.createElement('span');
+    s.textContent='●';
+    s.className=i<powerupUsesLeft?'cp-on':'cp-off';
+    el.appendChild(s);
+  }
+}
+function updateAllButtons(){
+  if(!gameRunning)return;
+  const outOfUses=gameSettings.mode==='competition'&&powerupUsesLeft<=0;
+  updateCdBtn('sweep',sweepCd,SWEEP_CD_BASE,outOfUses);
+  updateCdBtn('destroy',destroyCd,DESTROY_CD_BASE,outOfUses);
+  updateCdBtn('upgrade',upgradeCd,UPGRADE_CD_BASE,outOfUses);
+  updateCdBtn('comet',comet.cd,COMET_CD_BASE,outOfUses);
+  updateCdBtn('magnet',magnet.cd,MAGNET_CD_BASE,outOfUses);
+  updateCdBtn('quake',quake.cd,QUAKE_CD_BASE,quake.armed||quake.active||outOfUses);
+}
+function updateCdBtn(id,cd,maxCd,forceDisable){
+  const btn=document.getElementById(id+'-btn');
+  const overlay=document.getElementById(id+'-overlay');
+  const cdText=document.getElementById(id+'-cd');
+  const onCd=cd>0;
+  btn.disabled=onCd||forceDisable;
+  if(onCd){
+    overlay.style.height=(cd/maxCd*100)+'%';
+    cdText.classList.remove('hidden');cdText.textContent=Math.ceil(cd/1000)+'s';
+  } else {
+    overlay.style.height='0%';cdText.classList.add('hidden');
+  }
+}
+
+// ── AIM ───────────────────────────────────────────────────
+function moveAim(clientX){
+  if(!currentBody||!gameRunning||quake.armed||quake.active||activePowerup)return;
+  let x=canvasPoint(clientX,0).x;
+  const r=currentBody.circleRadius;
+  x=Math.max(r+4,Math.min(W-r-4,x));
+  dropX=x;Body.setPosition(currentBody,{x,y:50});
+}
+
+// ── INPUT ──────────────────────────────────────────────────
+const holder=document.getElementById('canvas-holder');
+
+// Previously this file had three touch handlers (touchstart/move/end) AND
+// three mouse handlers (mousedown/mousemove/mouseup) AND a window mouseup AND
+// two document-level mouse listeners — nine separate handlers doing largely
+// the same thing. Bugs fixed in one set often weren't fixed in the other.
+//
+// The Pointer Events API unifies mouse, touch, and stylus input into a single
+// stream of events. One set of handlers covers every device.
+//
+// setPointerCapture(e.pointerId) — called in pointerdown — is the key trick:
+// it tells the browser to keep routing all events for that pointer to this
+// element even if the pointer moves outside it. This replaces the document-
+// level listeners that existed specifically so comet-aim dragging wouldn't
+// break when the cursor left the canvas area.
+
+// Tracks whether a pointer is currently pressed (replaces the old `md` flag).
+let pointerDown = false;
+
+holder.addEventListener('pointerdown', e => {
+  e.preventDefault();
+  // Capture the pointer — all future move/up events for this pointer come
+  // here even if the pointer leaves the element bounds.
+  holder.setPointerCapture(e.pointerId);
+  pointerDown = true;
+
+  // ── Quake: armed (waiting for first grab) or active (currently shaking) ──
+  if(quake.armed || quake.active){
+    if(quake.armed){
+      startQuakeTimer(e.clientX, e.clientY);
+    } else {
+      // Re-grab mid-shake: record where the finger landed so we can compute
+      // relative movement in pointermove.
+      quake.touchAnchorX  = e.clientX; quake.touchAnchorY  = e.clientY;
+      quake.offsetAnchorX = quake.offsetX; quake.offsetAnchorY = quake.offsetY;
+      quake.touching = true;
+      // Kill any snap-back animation so the canvas follows the finger instantly.
+      document.getElementById('canvas-wrap').style.transition = 'none';
+    }
+    return;
+  }
+
+  // ── Comet: start slingshot drag ──
+  if(activePowerup === 'comet'){
+    const p = canvasPoint(e.clientX, e.clientY);
+    comet.drag = { startX: p.x, startY: p.y, curX: p.x, curY: p.y };
+    return;
+  }
+
+  // ── Normal play: move aim indicator, maybe start rapid-fire ──
+  if(!activePowerup) moveAim(e.clientX);
+  if(rapidMode) setRapidHeld(true);
+}, { passive: false });
+
+holder.addEventListener('pointermove', e => {
+  if(!pointerDown) return;
+  e.preventDefault();
+
+  // ── Quake shake: update canvas translate based on drag distance ──
+  if(quake.active && quake.touching){
+    quake.offsetX = quake.offsetAnchorX + (e.clientX - quake.touchAnchorX);
+    quake.offsetY = quake.offsetAnchorY + (e.clientY - quake.touchAnchorY);
+    quakeSetTransform('none');
+    return;
+  }
+
+  // ── Comet aim: update the drag endpoint (draw loop renders the arrow) ──
+  if(activePowerup === 'comet' && comet.drag){
+    const p = canvasPoint(e.clientX, e.clientY);
+    comet.drag.curX = p.x; comet.drag.curY = p.y;
+    return;
+  }
+
+  // ── Normal play: move the floating ball left/right ──
+  if(!activePowerup) moveAim(e.clientX);
+}, { passive: false });
+
+// Shared logic for pointer release. Defined as a named function so it can be
+// registered for both 'pointerup' and 'pointercancel' without duplication.
+// (pointercancel fires if the OS takes over — e.g. a swipe-to-home gesture.)
+function onPointerUp(e){
+  if(!pointerDown) return;
+  pointerDown = false;
+
+  // ── Quake active: release drag, snap canvas back to center ──
+  if(quake.active){
+    quake.touching = false;
+    quake.offsetX = 0; quake.offsetY = 0;
+    quakeSetTransform('transform 0.35s cubic-bezier(.25,.8,.25,1)');
+    return;
+  }
+  // ── Quake armed: finger lifted before grabbing, just clear flag ──
+  if(quake.armed){ quake.touching = false; return; }
+
+  setRapidHeld(false);
+
+  // ── Magnet beam active: any tap/release cancels the pull ──
+  if(magnet.pullInterval !== null){ cancelMagnetPull(); return; }
+
+  // ── Comet: release — fire along the drawn line! ──
+  if(activePowerup === 'comet' && comet.drag){
+    const p = canvasPoint(e.clientX, e.clientY);
+    // Compute the path BEFORE useCompetitionCharge(): spending the last charge
+    // triggers clearSelectMode(), which nulls comet.drag.
+    const path = cometPath(comet.drag.startX, comet.drag.startY, p.x, p.y);
+    comet.drag = null;
+    // A too-short drag (stray tap) returns null — treat as cancel, no charge.
+    if(path && useCompetitionCharge()){
+      fireComet(path);
+      dangerTimer = 0; // timer stays frozen during flight; fresh 2s after
+    }
+    clearSelectMode(); return;
+  }
+
+  // ── Other select-mode powerups (destroy/upgrade/magnet): tap to pick planet ──
+  if(activePowerup){ handleSelectTap(e.clientX, e.clientY); return; }
+
+  // ── Normal drop ──
+  if(!rapidMode) dropCurrent();
+}
+
+holder.addEventListener('pointerup',     onPointerUp, { passive: false });
+holder.addEventListener('pointercancel', onPointerUp, { passive: false });
+
+
+document.getElementById('sweep-btn').addEventListener('click',()=>{if(gameRunning)activateSweep();});
+document.getElementById('rapid-toggle').addEventListener('change',function(){
+  rapidMode=this.checked;
+  if(!rapidMode)stopRapid();
+});
+// ─── SELECT-MODE POWERUPS ───────────────────────────────────────
+// Four of our powerups (destroy, upgrade, comet, magnet) all behave the same
+// way at the button-click level: check cooldown → toggle active state → set
+// up the right CSS classes and hint text. The previous code had four separate
+// click handlers that were 90% identical — when we eventually want to add a
+// 5th select-mode powerup, copy-pasting that pattern again would be painful
+// and error-prone.
+//
+// Instead: describe each powerup as DATA in this table, then write the click
+// behavior ONCE in togglePowerup(). Adding a new powerup later = one new
+// entry in the table.
+//
+// Note: SWEEP and QUAKE aren't in here — they have totally different
+// behaviors (sweep fires instantly, quake has its own arm/grab/shake flow),
+// so they keep their own dedicated handlers.
+const SELECT_POWERUPS = {
+  destroy: {
+    getCd:       () => destroyCd,                  // function that reads the current cooldown
+    selectClass: 'select-destroy',                 // CSS class added to canvas-wrap when this is active
+    hintText:    'TAP A PLANET TO ZAP IT',         // text shown in the hint banner
+    hintClass:   'destroy',                        // CSS class on the hint banner (controls its color)
+  },
+  upgrade: {
+    getCd:        () => upgradeCd,
+    selectClass:  'select-upgrade',
+    get hintText(){ return gameSettings.reverseMode?'TAP A PLANET TO SHRINK IT':'TAP A PLANET TO EVOLVE IT'; },
+    hintClass:    'upgrade',
+  },
+  comet: {
+    getCd:       () => comet.cd,
+    selectClass: 'select-comet',
+    hintText:    'DRAG A LINE — COMET ZAPS ITS PATH',
+    hintClass:   'comet',
+  },
+  magnet: {
+    getCd:       () => magnet.cd,
+    selectClass: 'select-magnet',
+    hintText:    'TAP TWO SAME-TYPE PLANETS',
+    hintClass:   'magnet',
+  },
+};
+
+// Generic handler shared by all four select-mode powerup buttons.
+// `name` is one of the keys in SELECT_POWERUPS above.
+function togglePowerup(name){
+  const config = SELECT_POWERUPS[name];
+  // Don't allow activation if game isn't running or this powerup is on cooldown.
+  if(!gameRunning || config.getCd() > 0) return;
+
+  // If this powerup is ALREADY active, clicking the button cancels it.
+  // (clearSelectMode resets everything: activePowerup, magnet.firstBody, comet.drag,
+  //  CSS classes, hint banner. So we don't need per-powerup cleanup here.)
+  if(activePowerup === name){
+    clearSelectMode();
+    return;
+  }
+
+  // Otherwise: clear any other mode that might be active, then arm this one.
+  clearSelectMode();
+  activePowerup = name;
+
+  // Magnet and comet grant a danger-timer grace buffer the instant they're
+  // armed, so the seconds spent selecting/aiming don't cost the game. Flat SET
+  // (never +=), and clearSelectMode() zeroes it on cancel — so toggling the
+  // button on/off can't stack extra time. See the danger block in the loop.
+  if(name === 'comet' || name === 'magnet') dangerBonus = DANGER_GRACE_BONUS;
+
+  // Visual feedback: add classes to the canvas (changes the border color)
+  // and to the button itself (the pulsing "selected" effect).
+  document.getElementById('canvas-wrap').classList.add('select-mode', config.selectClass);
+  document.getElementById(name + '-btn').classList.add('selected');
+
+  // Show the on-canvas hint telling the player what to do next.
+  const hint = document.getElementById('select-hint');
+  hint.textContent = config.hintText;
+  hint.className   = config.hintClass;
+}
+
+// Wire all four select-mode powerup buttons in a single loop.
+// Each button now needs just ONE line to hook up, instead of ~9.
+['destroy','upgrade','comet','magnet'].forEach(name => {
+  document.getElementById(name + '-btn').addEventListener('click', () => togglePowerup(name));
+});
+
+// ── FIREBASE (SHARED LEADERBOARD) ─────────────────────────
+// Follow the setup instructions to get your config from firebase.google.com,
+// then replace the null below with your config object.
+// If this stays null the leaderboard works locally only (no sharing).
+//
+// const FIREBASE_CONFIG = null;                         ← local only
+// const FIREBASE_CONFIG = { apiKey: "...", ... };       ← shared leaderboard
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyCn1yMvlLF5iCkRQi81wV1H3joujPDbNSM",
+  authDomain: "cosmic-drop.firebaseapp.com",
+  databaseURL: "https://cosmic-drop-default-rtdb.firebaseio.com",
+  projectId: "cosmic-drop",
+  storageBucket: "cosmic-drop.firebasestorage.app",
+  messagingSenderId: "1006107619946",
+  appId: "1:1006107619946:web:c6eacc29d5b845bded1013"
+};
+
+let firebaseDb = null;
+(function initFirebase(){
+  if(!FIREBASE_CONFIG) return;
+  try{
+    firebase.initializeApp(FIREBASE_CONFIG);
+    firebaseDb = firebase.database();
+    console.log('🌐 Firebase connected — shared leaderboard active');
+  } catch(e){ console.warn('Firebase init failed:',e); }
+})();
+
+// ── HIGH SCORES ───────────────────────────────────────────
+// TEST BUILD: '_test' suffix + scores_test/ Firebase root keep test scores
+// completely separate from the real boards (test shares an origin with prod).
+const SCORES_ROOT='scores_test/';   // prod uses 'scores/'
+const SCORES_KEYS={
+  small:'cosmicDropScores_small_v4_test',  medium:'cosmicDropScores_med_v4_test',  large:'cosmicDropScores_large_v4_test',
+  rev_small:'cosmicDropScores_rev_small_v4_test', rev_medium:'cosmicDropScores_rev_med_v4_test', rev_large:'cosmicDropScores_rev_large_v4_test',
+};
+const scoresMap={small:[],medium:[],large:[],rev_small:[],rev_medium:[],rev_large:[]};
+let currentLbTab='medium'; // size dimension of the visible tab (small/medium/large)
+function getSizeKey(){return gameSettings.sizeScale<=0.65?'small':gameSettings.sizeScale>=1.0?'large':'medium';}
+// Full score key — incorporates both planet size and game mode (normal vs reverse).
+function getScoreKey(){const s=getSizeKey();return gameSettings.reverseMode?'rev_'+s:s;}
+
+// Fetch one size's scores from Firebase, sort high→low, keep the top 10, and
+// store them in scoresMap[k]; then run onDone(). This logic used to be copy-
+// pasted in loadScores / addScore / openLeaderboard — and the original
+// leaderboard bug (forEach stopping after one row) had to be fixed in all three
+// copies. Keeping it in one place means there's only ever one copy to get right.
+function fetchTopScores(k,onDone){
+  if(!firebaseDb)return;
+  firebaseDb.ref(SCORES_ROOT+k).once('value').then(snap=>{
+    const list=[];
+    snap.forEach(c=>{list.push(c.val());});
+    list.sort((a,b)=>b.score-a.score);
+    if(list.length>10)list.length=10;
+    if(list.length>0)scoresMap[k]=list;
+    if(onDone)onDone();
+  }).catch(e=>console.warn('Firebase scores fetch failed:',e));
+}
+
+function loadScores(){
+  // Load all six boards from localStorage immediately (3 normal + 3 reverse)
+  Object.keys(SCORES_KEYS).forEach(k=>{
+    try{const r=localStorage.getItem(SCORES_KEYS[k]);scoresMap[k]=r?JSON.parse(r):[];}
+    catch(e){scoresMap[k]=[];}
+  });
+  refreshBestDisplay();renderLeaderboard();
+  // Then pull all six from Firebase
+  Object.keys(SCORES_KEYS).forEach(k=>{
+    fetchTopScores(k,()=>{
+      if(k===getScoreKey())refreshBestDisplay();
+      renderLeaderboard();
+    });
+  });
+}
+function saveScores(k){
+  try{localStorage.setItem(SCORES_KEYS[k],JSON.stringify(scoresMap[k]));}catch(e){}
+}
+function getAllTimeHigh(){const l=scoresMap[getScoreKey()];return l.length>0?l[0].score:0;}
+function isTopTen(s){const l=scoresMap[getScoreKey()];return s>0&&(l.length<10||s>l[l.length-1].score);}
+
+// ── SAVE / RESUME ──────────────────────────────────────────
+// Persist an in-progress game to localStorage so locking the phone, switching
+// apps, or a tab eviction doesn't lose it. Bump SAVE_VERSION (and the key) to
+// invalidate old saves whenever the field or scoring changes — same idea as the
+// _v4 score keys above.
+const SAVE_VERSION=1;
+const SAVE_KEY='cosmicDropSave_v1_test';
+let _pendingResume=null;
+let _lastSave=0;                 // timestamp of the last successful snapshot (drives the heartbeat)
+function _r2(n){return Math.round(n*100)/100;}
+function clearSave(){try{localStorage.removeItem(SAVE_KEY);}catch(e){}}
+function snapshotGame(){
+  if(!gameActive)return;          // nothing in progress — don't write a save
+  try{
+    const bodies=[];
+    Composite.allBodies(engine.world).forEach(b=>{
+      // Skip the 4 static walls (no tier) and the waiting ball (stored as a
+      // tier) — those are transient, not part of the board.
+      if(b.tier===undefined||b===currentBody)return;
+      bodies.push({t:b.tier,x:_r2(b.position.x),y:_r2(b.position.y),a:_r2(b.angle),
+        vx:_r2(b.velocity.x),vy:_r2(b.velocity.y),av:_r2(b.angularVelocity)});
+    });
+    const snap={
+      v:SAVE_VERSION,ts:Date.now(),
+      settings:{mode:gameSettings.mode,sizeScale:gameSettings.sizeScale,reverseMode:gameSettings.reverseMode},
+      score:score,currentTier:currentTier,nextTier:nextTier,hasCurrent:currentBody!==null,
+      powerupUsesLeft:powerupUsesLeft,
+      cds:{sweep:Math.round(sweepCd),destroy:Math.round(destroyCd),upgrade:Math.round(upgradeCd),
+        comet:Math.round(comet.cd),magnet:Math.round(magnet.cd),quake:Math.round(quake.cd)},
+      bodies:bodies,
+    };
+    localStorage.setItem(SAVE_KEY,JSON.stringify(snap));
+    _lastSave=Date.now();
+  }catch(e){console.warn('Cosmic Drop: save failed',e);}
+}
+function loadSave(){
+  try{
+    const raw=localStorage.getItem(SAVE_KEY);
+    if(!raw)return null;
+    const s=JSON.parse(raw);
+    if(!s||s.v!==SAVE_VERSION||!Array.isArray(s.bodies)||!s.settings)return null;
+    if(s.ts&&Date.now()-s.ts>24*60*60*1000)return null;   // ignore saves older than 24h
+    return s;
+  }catch(e){return null;}
+}
+// Rebuild a game from a snapshot — the resume counterpart of setupGame().
+function restoreGame(snap){
+  gameSettings.mode=snap.settings.mode;
+  gameSettings.sizeScale=snap.settings.sizeScale;
+  gameSettings.reverseMode=snap.settings.reverseMode;
+
+  buildArena();
+  clearSave();                    // single-use: a restored game can't be resumed twice
+
+  popRings=[];particles=[];labels=[];
+  score=snap.score;updateScore();
+  dangerTimer=0;dangerBonus=0;lastFrameTs=0;   // fresh danger count — don't resume into an instant game-over
+  sweepCd=snap.cds.sweep;destroyCd=snap.cds.destroy;upgradeCd=snap.cds.upgrade;
+  comet.cd=snap.cds.comet;magnet.cd=snap.cds.magnet;quake.cd=snap.cds.quake;
+  comet.drag=null;comet.flight=null;magnet.firstBody=null;cancelMagnetPull();magnet.pullBodies=null;
+  endQuake(false);
+  activePowerup=null;clearSelectMode();updateAllButtons();stopRapid();rapidHeld=false;
+  document.getElementById('canvas-wrap').classList.remove('zoomed-out','select-mode','select-destroy','select-upgrade');
+  buildEvolutionGuide();
+  powerupUsesLeft=snap.powerupUsesLeft;updateChargeDisplay();
+  const _charges=document.getElementById('comp-charges');
+  if(_charges)_charges.classList.toggle('hidden',gameSettings.mode!=='competition');
+  const _revBadge=document.getElementById('reverse-badge');
+  if(_revBadge)_revBadge.classList.toggle('hidden',!gameSettings.reverseMode);
+  document.querySelector('#upgrade-btn .pw-icon').textContent=gameSettings.reverseMode?'⬇':'⬆';
+  document.querySelector('#upgrade-btn .pw-label').textContent=gameSettings.reverseMode?'SHRINK':'EVOLVE';
+
+  // Rebuild every saved planet at its exact position, angle and velocity.
+  snap.bodies.forEach(s=>{
+    const b=makeBody(s.t,s.x,s.y);
+    Body.setAngle(b,s.a);
+    Body.setVelocity(b,{x:s.vx,y:s.vy});
+    Body.setAngularVelocity(b,s.av);
+    Composite.add(engine.world,b);
+  });
+
+  // Restore the ball waiting at the top. If none was waiting when we saved
+  // (mid-spawn), let the normal spawn flow produce the next one.
+  if(snap.hasCurrent){
+    currentTier=snap.currentTier;nextTier=snap.nextTier;
+    currentBody=makeBody(currentTier,dropX,50,true);
+    Composite.add(engine.world,currentBody);canDrop=true;updateNextPreview();
+  } else {
+    nextTier=snap.nextTier;spawnCurrent();
+  }
+
+  gameRunning=true;gameActive=true;
+  cancelAnimationFrame(animFrame);drawLoop();
+}
+// On load, if a valid in-progress game is saved, offer to resume it.
+function maybeOfferResume(){
+  const s=loadSave();
+  if(!s)return;
+  _pendingResume=s;
+  const sub=document.getElementById('resume-sub');
+  if(sub){
+    const sizeName=s.settings.sizeScale<=0.65?'Small':s.settings.sizeScale>=1.0?'Large':'Medium';
+    sub.textContent='Score '+Number(s.score||0).toLocaleString()+' · '+sizeName+(s.settings.reverseMode?' · Reverse':'');
+  }
+  document.getElementById('title').classList.add('hidden');
+  document.getElementById('resume-screen').classList.add('show');
+}
+async function resumeSavedGame(){
+  if(!_pendingResume)return;
+  await initAudio();
+  document.getElementById('resume-screen').classList.remove('show');
+  document.getElementById('title').classList.add('hidden');
+  ['sweep-btn','destroy-btn','upgrade-btn','comet-btn','magnet-btn','quake-btn'].forEach(id=>document.getElementById(id).disabled=false);
+  const snap=_pendingResume;_pendingResume=null;
+  restoreGame(snap);
+}
+function dismissResume(){
+  document.getElementById('resume-screen').classList.remove('show');
+  document.getElementById('title').classList.remove('hidden');
+}
+function addScore(name,s){
+  const k=getScoreKey();
+  const d=new Date();
+  const date=d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+  const entry={name:(name||'').trim()||'Anonymous',score:s,date};
+  scoresMap[k].push(entry);
+  scoresMap[k].sort((a,b)=>b.score-a.score);
+  if(scoresMap[k].length>10)scoresMap[k].length=10;
+  saveScores(k);refreshBestDisplay();renderLeaderboard();
+  if(firebaseDb){
+    firebaseDb.ref(SCORES_ROOT+k).push(entry)
+      .then(()=>fetchTopScores(k,()=>{saveScores(k);refreshBestDisplay();renderLeaderboard();}))
+      .catch(e=>console.warn('Firebase save failed:',e));
+  }
+}
+function refreshBestDisplay(){
+  const el=document.getElementById('best-score');
+  if(!el)return;
+  const best=getAllTimeHigh();
+  if(best>0){el.textContent='BEST '+best.toLocaleString();}else{el.textContent='';}
+}
+function escHtml(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function updateLbTabs(){
+  const rev=gameSettings.reverseMode;
+  // Theme the overlay — CSS handles orange-vs-gold via .reverse-mode class
+  document.getElementById('leaderboard').classList.toggle('reverse-mode',rev);
+  // Heading
+  const h2=document.querySelector('#leaderboard h2');
+  if(h2)h2.textContent=rev?'⬇ Reverse Board':'🏆 Leaderboard';
+  // Active tab
+  ['small','medium','large'].forEach(k=>{
+    const btn=document.getElementById('lb-tab-'+k);
+    if(btn)btn.classList.toggle('active',k===currentLbTab);
+  });
+  // Subtitle
+  const sub=document.getElementById('lb-size-title');
+  const label=currentLbTab.charAt(0).toUpperCase()+currentLbTab.slice(1);
+  if(sub)sub.textContent=(rev?'⬇ Reverse · ':'')+label+' Planets — Top 10';
+}
+function renderLeaderboard(highlightScore){
+  const tbody=document.getElementById('lb-tbody');
+  if(!tbody)return;
+  tbody.innerHTML='';
+  const list=scoresMap[gameSettings.reverseMode?'rev_'+currentLbTab:currentLbTab];
+  if(list.length===0){
+    const tr=document.createElement('tr');
+    tr.innerHTML='<td colspan="4" class="lb-empty">No scores yet — play a game!</td>';
+    tbody.appendChild(tr);return;
+  }
+  const medals=['🥇','🥈','🥉'];
+  list.forEach((entry,i)=>{
+    const tr=document.createElement('tr');
+    if(highlightScore&&entry.score===highlightScore)tr.classList.add('lb-highlight');
+    tr.innerHTML=`<td class="lb-rank">${medals[i]||'#'+(i+1)}</td>`+
+      `<td class="lb-name">${escHtml(entry.name)}</td>`+
+      `<td class="lb-score">${Number(entry.score).toLocaleString()}</td>`+
+      `<td class="lb-date">${escHtml(entry.date)}</td>`;
+    tbody.appendChild(tr);
+  });
+}
+function openLeaderboard(highlightScore){
+  currentLbTab=getSizeKey();
+  updateLbTabs();
+  renderLeaderboard(highlightScore);
+  document.getElementById('leaderboard').classList.add('show');
+  // Refresh only the three boards for the current mode (normal or reverse)
+  const rev=gameSettings.reverseMode;
+  ['small','medium','large'].forEach(size=>{
+    fetchTopScores(rev?'rev_'+size:size,()=>renderLeaderboard(highlightScore));
+  });
+}
+function closeLeaderboard(){document.getElementById('leaderboard').classList.remove('show');}
+function showGameOver(){
+  document.getElementById('final-score').textContent=score;
+  document.getElementById('gameover').classList.add('show');
+}
+function _roundRect(cx,x,y,w,h,r){
+  cx.beginPath();cx.moveTo(x+r,y);cx.lineTo(x+w-r,y);cx.arcTo(x+w,y,x+w,y+r,r);
+  cx.lineTo(x+w,y+h-r);cx.arcTo(x+w,y+h,x+w-r,y+h,r);cx.lineTo(x+r,y+h);
+  cx.arcTo(x,y+h,x,y+h-r,r);cx.lineTo(x,y+r);cx.arcTo(x,y,x+r,y,r);cx.closePath();
+}
+function shareScoreCard(){
+  const PAD=20,HEADER=90,FOOTER=48;
+  const cw=W+PAD*2, ch=H+HEADER+FOOTER;
+  const card=document.createElement('canvas');
+  card.width=cw; card.height=ch;
+  const cx=card.getContext('2d');
+  // background
+  cx.fillStyle='#0a0a1a'; cx.fillRect(0,0,cw,ch);
+  // deterministic stars
+  const rng=n=>{const s=Math.sin(n+1)*43758.5453;return s-Math.floor(s);};
+  for(let i=0;i<55;i++){
+    cx.beginPath();cx.arc(rng(i*3)*cw,rng(i*3+1)*ch,rng(i*3+2)*1.4+0.3,0,Math.PI*2);
+    cx.fillStyle=`rgba(255,255,255,${(0.3+rng(i)*0.55).toFixed(2)})`;cx.fill();
+  }
+  // title
+  cx.textAlign='center';
+  cx.fillStyle='#ffffff';cx.font='bold 30px Fredoka,sans-serif';
+  cx.shadowColor='rgba(167,139,250,0.9)';cx.shadowBlur=18;
+  cx.fillText('COSMIC DROP',cw/2,PAD+34);cx.shadowBlur=0;
+  // score
+  cx.fillStyle='#a78bfa';cx.font='bold 21px "Space Mono",monospace';
+  cx.fillText('Score: '+score.toLocaleString(),cw/2,PAD+64);
+  // board snapshot with rounded clip
+  cx.save();_roundRect(cx,PAD,HEADER,W,H,12);cx.clip();
+  cx.drawImage(gameCanvas,PAD,HEADER,W,H);cx.restore();
+  // board border
+  cx.strokeStyle='rgba(167,139,250,0.45)';cx.lineWidth=2;
+  _roundRect(cx,PAD,HEADER,W,H,12);cx.stroke();
+  // url footer
+  cx.fillStyle='rgba(255,255,255,0.4)';cx.font='12px "Space Mono",monospace';
+  cx.fillText('brandonscodeisgreat.github.io/cosmic-drop',cw/2,ch-14);
+  // share or download
+  const isFirefox=/firefox/i.test(navigator.userAgent);
+  card.toBlob(blob=>{
+    const file=new File([blob],'cosmic-drop-score.png',{type:'image/png'});
+    if(!isFirefox&&navigator.canShare&&navigator.canShare({files:[file]})){
+      navigator.share({title:'Cosmic Drop',text:'I scored '+score.toLocaleString()+' on Cosmic Drop!',files:[file]}).catch(()=>{});
+    } else if(isFirefox){
+      const url=URL.createObjectURL(blob);
+      const img=document.getElementById('share-card-img');
+      if(img.src)URL.revokeObjectURL(img.src);
+      img.src=url;
+      document.getElementById('share-card-overlay').classList.add('show');
+    } else {
+      const a=document.createElement('a');
+      a.href=URL.createObjectURL(blob);a.download='cosmic-drop-score.png';a.click();
+      setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+    }
+  },'image/png');
+}
+function showNameEntry(){
+  document.getElementById('ne-score').textContent=score.toLocaleString();
+  const inp=document.getElementById('name-input');inp.value='';
+  document.getElementById('name-entry').classList.add('show');
+  setTimeout(()=>inp.focus(),300);
+}
+function submitName(){
+  const name=document.getElementById('name-input').value;
+  document.getElementById('name-entry').classList.remove('show');
+  addScore(name,score);
+  showGameOver();
+}
+function skipNameEntry(){
+  document.getElementById('name-entry').classList.remove('show');
+  showGameOver();
+}
+// Allow Enter key to submit name
+document.getElementById('name-input').addEventListener('keydown',e=>{if(e.key==='Enter')submitName();});
+document.getElementById('lb-close-btn').addEventListener('click',closeLeaderboard);
+document.getElementById('lb-open-btn').addEventListener('click',()=>openLeaderboard());
+document.getElementById('go-lb-btn').addEventListener('click',()=>openLeaderboard(score));
+// Size tab buttons
+['small','medium','large'].forEach(k=>{
+  document.getElementById('lb-tab-'+k).addEventListener('click',()=>{
+    currentLbTab=k;
+    updateLbTabs();
+    renderLeaderboard();
+  });
+});
+
+// ── UI HELPERS ────────────────────────────────────────────
+function toggleSound(){
+  soundEnabled=!soundEnabled;
+  document.getElementById('sound-btn').textContent=soundEnabled?'🔊':'🔇';
+}
+function updateScore(){
+  document.getElementById('score').textContent=score;
+  // Live "best" indicator during play
+  const el=document.getElementById('best-score');
+  if(!el)return;
+  const best=getAllTimeHigh();
+  if(score>best&&best>0){
+    el.textContent='✦ NEW BEST';el.classList.add('new-best');
+  } else {
+    if(best>0){el.textContent='BEST '+best.toLocaleString();}
+    el.classList.remove('new-best');
+  }
+}
+function rndT(){
+  if(gameSettings.reverseMode)return PLANETS.length-1-Math.floor(Math.random()*(MAX_DROP_TIER+1));
+  return Math.floor(Math.random()*(MAX_DROP_TIER+1));
+}
+function updateNextPreview(){
+  const nc=document.getElementById('next-canvas'),ctx=nc.getContext('2d');
+  ctx.clearRect(0,0,52,52);PLANETS[nextTier].drawFn(ctx,26,26,20);
+}
+function buildEvolutionGuide(){
+  const evo=document.getElementById('evolution');evo.innerHTML='';
+  if(gameSettings.reverseMode){
+    // Sun → Jupiter → … → Asteroid → ✦ (singularity)
+    for(let i=PLANETS.length-1;i>=0;i--){
+      const c=document.createElement('canvas'),sz=10+i*1.8;
+      c.width=sz;c.height=sz;c.style.borderRadius='50%';
+      PLANETS[i].drawFn(c.getContext('2d'),sz/2,sz/2,sz/2-1);evo.appendChild(c);
+      if(i>0){const a=document.createElement('span');a.className='evo-arrow';a.textContent='>';evo.appendChild(a);}
+    }
+    const arr=document.createElement('span');arr.className='evo-arrow';arr.textContent='>';evo.appendChild(arr);
+    const star=document.createElement('span');star.style.cssText='font-size:11px;color:#c0bec8;line-height:1;';star.textContent='✦';evo.appendChild(star);
+  } else {
+    PLANETS.forEach((p,i)=>{
+      const c=document.createElement('canvas'),sz=10+i*1.8;
+      c.width=sz;c.height=sz;c.style.borderRadius='50%';
+      p.drawFn(c.getContext('2d'),sz/2,sz/2,sz/2-1);evo.appendChild(c);
+      if(i<PLANETS.length-1){const a=document.createElement('span');a.className='evo-arrow';a.textContent='>';evo.appendChild(a);}
+    });
+  }
+}
+function rrect(ctx,x,y,w,h,r){
+  ctx.beginPath();ctx.moveTo(x+r,y);ctx.lineTo(x+w-r,y);ctx.arcTo(x+w,y,x+w,y+r,r);
+  ctx.lineTo(x+w,y+h-r);ctx.arcTo(x+w,y+h,x+w-r,y+h,r);
+  ctx.lineTo(x+r,y+h);ctx.arcTo(x,y+h,x,y+h-r,r);ctx.lineTo(x,y+r);ctx.arcTo(x,y,x+r,y,r);ctx.closePath();
+}
+
+// ── SETTINGS SCREEN ───────────────────────────────────────
+function openSettings(){
+  document.getElementById('settings').classList.add('show');
+  // Sync mode buttons to current state
+  document.querySelectorAll('.mode-opt').forEach(b=>{
+    b.classList.toggle('active',!eggActive&&b.dataset.mode===gameSettings.mode);
+  });
+  if(eggActive)document.getElementById('egg-toast').classList.remove('hidden');
+  updateModeDesc();
+  drawSizePreview();
+}
+function closeSettings(){
+  document.getElementById('settings').classList.remove('show');
+  // Read mode (egg overrides the buttons)
+  if(!eggActive){
+    const activeMode=document.querySelector('.mode-opt.active');
+    if(activeMode)gameSettings.mode=activeMode.dataset.mode;
+  }
+  gameSettings.reverseMode=document.getElementById('setting-reversemode').checked;
+  const active=document.querySelector('.size-opt.active');
+  if(active){
+    const s=active.dataset.size;
+    gameSettings.sizeScale=s==='small'?0.65:s==='medium'?0.85:1.0;
+  }
+}
+function drawSizePreview(){
+  const preview=document.getElementById('size-preview');
+  preview.innerHTML='';
+  // Draw three small planet canvases showing current size differences
+  const active=document.querySelector('.size-opt.active');
+  const scale=active?
+    (active.dataset.size==='small'?0.65:active.dataset.size==='medium'?0.85:1.0):0.85;
+  // Show Earth as the preview planet
+  const sizes=[0.65,0.85,1.0].map(s=>({scale:s,r:Math.round(BASE_RADII[5]*s)}));
+  sizes.forEach(({scale:sc,r})=>{
+    const c=document.createElement('canvas');
+    const sz=(r+2)*2;c.width=sz;c.height=sz;
+    PLANET_DRAWS[5](c.getContext('2d'),sz/2,sz/2,r);
+    c.style.opacity=sc===scale?'1':'0.35';
+    c.style.transition='opacity .2s';
+    preview.appendChild(c);
+  });
+}
+document.getElementById('settings-open-btn').addEventListener('click',openSettings);
+document.getElementById('settings-close-btn').addEventListener('click',closeSettings);
+document.querySelectorAll('.size-opt').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    document.querySelectorAll('.size-opt').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    drawSizePreview();
+  });
+});
+
+// Default size to medium
+document.querySelector('.size-opt[data-size="medium"]').classList.add('active');
+gameSettings.sizeScale=0.85;
+
+// ── GAME MODE BUTTONS ──────────────────────────────────────
+function updateModeDesc(){
+  const el=document.getElementById('mode-desc');if(!el)return;
+  if(eggActive){el.textContent='✦ No Cooldowns active — unlimited powerups, no score submission';return;}
+  const m=document.querySelector('.mode-opt.active')?.dataset.mode||'competition';
+  el.textContent=m==='competition'
+    ?'🏆 5 powerup uses per game. Scores submitted to leaderboard.'
+    :'🧘 Unlimited cooldown-based powerups. No score submission.';
+}
+document.querySelectorAll('.mode-opt').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    // If egg was active, pressing a mode button deactivates it
+    if(eggActive){
+      eggActive=false;eggCount=0;
+      if(eggTimer){clearTimeout(eggTimer);eggTimer=null;}
+      document.getElementById('egg-toast').classList.add('hidden');
+    }
+    document.querySelectorAll('.mode-opt').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    gameSettings.mode=btn.dataset.mode;
+    updateModeDesc();
+    // Track toggles for easter egg
+    eggCount++;
+    if(eggTimer)clearTimeout(eggTimer);
+    eggTimer=setTimeout(()=>{eggCount=0;},30000);
+    if(eggCount>=10){
+      eggActive=true;
+      gameSettings.mode='nocooldown';
+      document.getElementById('egg-toast').classList.remove('hidden');
+      updateModeDesc();
+    }
+  });
+});
+
+// ── START / END / RESTART ─────────────────────────────────
+function openPauseMenu(){
+  if(!gameRunning)return;
+  // Our own flag — tells drawLoop() and the danger-detection code to skip work.
+  gameRunning=false;
+  // Cancels the next scheduled draw frame so we stop rendering.
+  cancelAnimationFrame(animFrame);
+  // ─── PAUSE FIX ───
+  // Matter.js runs physics on its OWN internal clock (the "Runner") that ticks
+  // every ~16ms, completely independent of our drawLoop. If we only stop our
+  // draw loop, the player sees a frozen image but balls are still falling in
+  // the simulation — so when they unpause, balls have moved (or even hit the
+  // danger line!) during what was supposed to be a pause.
+  // Stopping the Runner here makes the pause actually pause.
+  Runner.stop(physicsRunner);
+  stopRapid();
+  document.getElementById('pause-menu').style.display='flex';
+}
+function closePauseMenu(){
+  document.getElementById('pause-menu').style.display='none';
+  if(!gameRunning){
+    gameRunning=true;                       // re-enable our draw loop's work
+    lastFrameTs=0;                          // reset so the first frame's dt is sane (not "10 seconds of pause")
+    // ─── PAUSE FIX ───
+    // We stopped the Matter Runner in openPauseMenu(); restart it now.
+    // Without this, drawLoop would resume but the physics simulation
+    // would stay frozen — balls drawn but never moving.
+    // Exception: a comet mid-flight stopped the runner itself and will
+    // restart it when the flight completes — don't unfreeze early.
+    if(!comet.flight) Runner.run(physicsRunner, engine);
+
+    // ─── SPAWN RECOVERY ───
+    // When a ball is dropped, a 600ms setTimeout is scheduled to spawn the
+    // next ball. That timer runs on the real wall clock — it doesn't know
+    // about game state. If the player paused during those 600ms, the timer
+    // fired while gameRunning was false, saw the guard `if(gameRunning)`,
+    // and skipped spawning. On resume, no ball exists and canDrop is still
+    // false, so the game is permanently stuck.
+    //
+    // We detect that "limbo" state here: no current ball + canDrop still
+    // false means the spawn was skipped. Calling spawnCurrent() directly
+    // recovers cleanly, exactly as the timer would have done.
+    if(!currentBody && !canDrop) spawnCurrent();
+
+    drawLoop();
+  }
+}
+// ── TAB VISIBILITY — silently pause/resume on tab switch ──────────────
+// When the player switches tabs the browser throttles or kills RAF,
+// which can let the physics runner accumulate a huge time-delta and
+// send balls flying on return, triggering a false game-over.
+// Fix: mirror the existing pause/resume logic without touching the UI.
+let _tabAutopaused = false;
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) {
+    snapshotGame();   // persist before the browser can evict the backgrounded tab
+    // Tab hidden — suspend if the game is actively running
+    if (gameRunning) {
+      _tabAutopaused = true;
+      gameRunning = false;
+      cancelAnimationFrame(animFrame);
+      Runner.stop(physicsRunner);
+      stopRapid();
+    }
+  } else {
+    // Tab visible again — resume only if WE paused it (not the player)
+    if (_tabAutopaused) {
+      _tabAutopaused = false;
+      gameRunning = true;
+      lastFrameTs = 0;           // reset so first resumed frame has a sane dt
+      // Same comet-mid-flight exception as closePauseMenu()
+      if(!comet.flight) Runner.run(physicsRunner, engine);
+      if (!currentBody && !canDrop) spawnCurrent(); // spawn-limbo recovery
+      drawLoop();
+    }
+  }
+});
+// Also save on pagehide — fires when navigating away (more reliable than unload on mobile).
+window.addEventListener('pagehide',snapshotGame);
+function returnToMenu(){
+  gameRunning=false;gameActive=false;clearSave();   // deliberate quit — nothing to resume
+  cancelAnimationFrame(animFrame);
+  stopRapid();
+  endQuake(false);
+  if(physicsRunner)Runner.stop(physicsRunner);
+  if(engine){Composite.clear(engine.world);Engine.clear(engine);}
+  const wrap=document.getElementById('canvas-wrap');
+  wrap.classList.remove('zoomed-out','select-mode','select-destroy','select-upgrade');
+  clearSelectMode();
+  document.getElementById('gameover').classList.remove('show');
+  document.getElementById('name-entry').classList.remove('show');
+  document.getElementById('pause-menu').style.display='none';
+  document.getElementById('title').classList.remove('hidden');
+  const _rb=document.getElementById('reverse-badge');if(_rb)_rb.classList.add('hidden');
+  document.querySelector('#upgrade-btn .pw-icon').textContent='⬆';
+  document.querySelector('#upgrade-btn .pw-label').textContent='EVOLVE';
+}
+async function startGame(){
+  await initAudio();
+  document.getElementById('title').classList.add('hidden');
+  document.getElementById('gameover').classList.remove('show');
+  document.getElementById('settings').classList.remove('show');
+  // Apply settings one final time in case settings were open
+  closeSettings();
+  ['sweep-btn','destroy-btn','upgrade-btn','comet-btn','magnet-btn','quake-btn'].forEach(id=>document.getElementById(id).disabled=false);
+  setupGame();
+}
+function endGame(){
+  gameRunning=false;gameActive=false;clearSave();   // game finished — nothing to resume
+  cancelAnimationFrame(animFrame);clearSelectMode();cancelMagnetPull();
+  endQuake(false);
+  if(gameSettings.mode==='competition'&&isTopTen(score)){showNameEntry();}else{showGameOver();}
+}
+function restartGame(){
+  cancelAnimationFrame(animFrame);
+  endQuake(false);
+  if(physicsRunner)Runner.stop(physicsRunner);
+  if(engine){Composite.clear(engine.world);Engine.clear(engine);}
+  document.getElementById('canvas-wrap').classList.remove('zoomed-out','select-mode','select-destroy','select-upgrade');
+  // ─── PAUSE-MENU OVERLAY FIX ───
+  // The pause menu uses an inline `style.display` to show/hide itself (unlike
+  // the other overlays, which use a `.show` CSS class). Restart was cleaning
+  // up everything EXCEPT the pause menu — so if you paused and then clicked
+  // Restart, the new game would start behind a still-visible pause overlay.
+  // (returnToMenu already does this; restartGame was just missing it.)
+  document.getElementById('pause-menu').style.display='none';
+  clearSelectMode();startGame();
+}
+
+
+// NOTE: comet-btn and magnet-btn click handlers are NOT here — they're wired
+// up by the SELECT_POWERUPS system earlier in the file (search for that name).
+// Only buttons with unique behavior get their own one-off handlers below.
+document.getElementById('start-btn').addEventListener('click',startGame);
+document.getElementById('resume-btn').addEventListener('click',resumeSavedGame);
+document.getElementById('resume-menu-btn').addEventListener('click',dismissResume);
+document.getElementById('quake-btn').addEventListener('click',activateQuake);
+document.getElementById('menu-btn').addEventListener('click',returnToMenu);
+document.getElementById('restart-btn').addEventListener('click',restartGame);
+document.getElementById('share-btn').addEventListener('click',shareScoreCard);
+document.getElementById('share-card-close-btn').addEventListener('click',()=>{
+  const overlay=document.getElementById('share-card-overlay');
+  overlay.classList.remove('show');
+  const img=document.getElementById('share-card-img');
+  URL.revokeObjectURL(img.src);
+  img.src='';
+});
+
+// ── INIT ──────────────────────────────────────────────────
+loadScores();
+maybeOfferResume();   // if an in-progress game was saved, show the Resume screen
+
+// ── STARS ──────────────────────────────────────────────────
+(function(){
+  const space=document.getElementById('space');
+  for(let i=0;i<70;i++){
+    const s=document.createElement('div'),sz=Math.random()*2+.5;
+    s.style.cssText=`position:fixed;width:${sz}px;height:${sz}px;background:#fff;border-radius:50%;
+      left:${Math.random()*100}%;top:${Math.random()*100}%;opacity:${Math.random()*.6+.2};
+      animation:twinkle ${2+Math.random()*3}s ease-in-out infinite alternate;`;
+    space.appendChild(s);}
+  const st=document.createElement('style');
+  st.textContent='@keyframes twinkle{from{opacity:.2}to{opacity:.9}}';
+  document.head.appendChild(st);
+})();
+
+// ============================================================
+</script>
+</body>
+</html>

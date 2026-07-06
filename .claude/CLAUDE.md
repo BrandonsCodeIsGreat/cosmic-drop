@@ -24,6 +24,7 @@ All editable logic lives **above** that marker.
 - **Current version = the highest-numbered `archive/Cosmic_Drop_vN.html`** (confirm with `git log --oneline`). Never hard-code the current version number in docs — derive it, so it can't go stale across terminals.
 - **Repo:** https://github.com/BrandonsCodeIsGreat/cosmic-drop — deploys automatically from the `master` branch on push.
 - **Live URLs:** https://cosmic-drop.onrender.com (Render, primary) and https://brandonscodeisgreat.github.io/cosmic-drop (GitHub Pages, via `.github/workflows/deploy-pages.yml`).
+- **Test zone:** `test/index.html` — experimental build, served at https://brandonscodeisgreat.github.io/cosmic-drop/test/ by the same Pages workflow (it uploads the whole repo, so no extra infra). Isolation: localStorage keys carry a `_test` suffix, the Firebase leaderboard points at `scores_test/` (currently denied by DB rules → leaderboard is local-only in test), sounds load from `../sounds/`. The test build is OUTSIDE the archive versioning flow — promote a finished feature by folding its diff into the next `archive/Cosmic_Drop_vN.html`.
 - **Pending decisions / open questions live in `NOTES.md`** at the repo root (e.g. the leaderboard `_v4`→`_v5` reset). Check it before competitive-scoring changes.
 - **Sounds:** `sounds/drop.mp3` + `sounds/merge.mp3`, loaded via `fetch()` (since v11; replaced inline base64 blobs). `archive/device-measure.html` measures a device's real playfield size.
 
