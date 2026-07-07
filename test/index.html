@@ -943,7 +943,7 @@ function setRapidHeld(held){
 function stopRapid(){
   clearInterval(rapidInterval);rapidInterval=null;
 }
-let popRings=[],particles=[],labels=[];
+let popRings=[],particles=[],labels=[],boreCuts=[];
 
 // ── COMPETITION MODE ──────────────────────────────────────
 const COMPETITION_USES=5;
@@ -1166,6 +1166,70 @@ function doFlash(color,alpha,ms){
   el.style.background=color;el.style.transition='none';el.style.opacity=alpha;
   setTimeout(()=>{el.style.transition=`opacity ${ms}ms ease-out`;el.style.opacity=0;},30);
 }
+// Cut-edge colour as it cools: white-hot → yellow → orange → deep red.
+function coolColor(t){
+  if(t<0.15)return '#fffdf5';
+  if(t<0.35)return '#ffe27a';
+  if(t<0.6) return '#ff9a2e';
+  return '#e0431a';
+}
+// Renders + ages the comet's bore cuts. Each cut splits a planet's sprite
+// along the comet's line of travel; the halves slide apart (perpendicular to
+// the cut) with a slight tumble behind a molten seam that cools and fades.
+function drawBoreCuts(){
+  boreCuts=boreCuts.filter(c=>c.age<c.maxAge);
+  for(const c of boreCuts){
+    const t=c.age/c.maxAge;                 // 0 → 1 over the cut's life
+    const ease=1-Math.pow(1-t,3);           // ease-out for the separation
+    const perpx=-c.uy,perpy=c.ux;           // separation axis (⊥ to the cut)
+    const drift=c.r*0.85*ease;              // how far each half has slid
+    const sp=planetSprites[c.tier], hi=sp?sp.half:0, BIG=c.r*3;
+    const alpha=1-Math.max(0,(t-0.55)/0.45);// hold, then fade the halves out
+    // Two halves: clip the sprite to each side of the cut line, drift + tumble.
+    for(const s of[-1,1]){
+      const dx=perpx*s*drift, dy=perpy*s*drift;
+      gameCtx.save();
+      gameCtx.globalAlpha=alpha;
+      gameCtx.translate(c.x+dx,c.y+dy);
+      gameCtx.rotate(c.tumble*s*ease);
+      gameCtx.translate(-c.x,-c.y);
+      // Half-plane on side s of the line through (c.x,c.y) along (ux,uy).
+      const ax=c.x+c.ux*BIG,ay=c.y+c.uy*BIG,bx=c.x-c.ux*BIG,by=c.y-c.uy*BIG;
+      gameCtx.beginPath();
+      gameCtx.moveTo(bx,by);gameCtx.lineTo(ax,ay);
+      gameCtx.lineTo(ax+perpx*s*BIG,ay+perpy*s*BIG);
+      gameCtx.lineTo(bx+perpx*s*BIG,by+perpy*s*BIG);
+      gameCtx.closePath();gameCtx.clip();
+      if(sp)gameCtx.drawImage(sp.canvas,c.x-hi,c.y-hi);
+      else PLANETS[c.tier].drawFn(gameCtx,c.x,c.y,c.r);
+      gameCtx.restore();
+    }
+    // Molten seam: a glowing bar riding each half's inner edge.
+    const cool=coolColor(t);
+    for(const s of[-1,1]){
+      const dx=perpx*s*drift, dy=perpy*s*drift;
+      gameCtx.save();
+      gameCtx.globalAlpha=(1-t)*0.95;
+      gameCtx.strokeStyle=cool;gameCtx.lineWidth=Math.max(1,c.r*0.16*(1-t*0.5));
+      gameCtx.lineCap='round';gameCtx.shadowColor=cool;gameCtx.shadowBlur=16*(1-t)+4;
+      gameCtx.beginPath();
+      gameCtx.moveTo(c.x+c.ux*c.r+dx,c.y+c.uy*c.r+dy);
+      gameCtx.lineTo(c.x-c.ux*c.r+dx,c.y-c.uy*c.r+dy);
+      gameCtx.stroke();gameCtx.restore();
+    }
+    // Hot core glow in the widening seam, early on.
+    if(t<0.5){
+      const a=1-t/0.5;
+      const g=gameCtx.createRadialGradient(c.x,c.y,0,c.x,c.y,c.r*1.1);
+      g.addColorStop(0,`rgba(255,240,200,${0.5*a})`);
+      g.addColorStop(0.5,`rgba(255,140,40,${0.3*a})`);
+      g.addColorStop(1,'rgba(255,80,0,0)');
+      gameCtx.save();gameCtx.beginPath();gameCtx.arc(c.x,c.y,c.r*1.1,0,Math.PI*2);
+      gameCtx.fillStyle=g;gameCtx.fill();gameCtx.restore();
+    }
+    c.age++;
+  }
+}
 
 // ── CANVAS FIT ───────────────────────────────────────────
 // Scale the fixed logical field (W×H) to fit the holder while preserving the
@@ -1243,7 +1307,7 @@ function setupGame(){
   buildArena();
   clearSave();   // starting fresh — drop any resumable game
 
-  popRings=[];particles=[];labels=[];
+  popRings=[];particles=[];labels=[];boreCuts=[];
   score=0;updateScore();dangerTimer=0;dangerBonus=0;lastFrameTs=0;
   sweepCd=0;destroyCd=0;upgradeCd=0;comet.cd=0;magnet.cd=0;quake.cd=0;comet.drag=null;comet.flight=null;magnet.firstBody=null;
   cancelMagnetPull();magnet.pullBodies=null;
@@ -1353,7 +1417,7 @@ function drawLoop(){
     for(const b of bodies){
       if(b.tier===undefined||b===currentBody||b.merging)continue;
       if(segDist(b.position.x,b.position.y,px,py,f.x,f.y)<b.circleRadius+COMET_RADIUS){
-        f.zapped++;zapBody(b);
+        f.zapped++;boreThroughPlanet(b,f.ux,f.uy);
       }
     }
     // Afterglow along the traversed part of the path
@@ -1375,6 +1439,9 @@ function drawLoop(){
       Runner.run(physicsRunner,engine);
     }
   }
+  // Bore cuts (planets the comet has sliced) — aged every frame, so they finish
+  // even after the physics runner restarts at the end of the flight.
+  drawBoreCuts();
   // Draw path preview while dragging
   if(comet.drag){
     drawCometAim(gameCtx,comet.drag.startX,comet.drag.startY,comet.drag.curX,comet.drag.curY);
@@ -1540,6 +1607,33 @@ function fireComet(path){
 function zapBody(b){
   const tier=b.tier,x=b.position.x,y=b.position.y;
   Composite.remove(engine.world,b);addZapEffects(x,y,tier);playZap();
+}
+// ── COMET BORE ────────────────────────────────────────────
+// The line-sweep comet doesn't ZAP planets with the pink burst — it bores
+// THROUGH them. Remove the physics body and hand off to a visual-only bore
+// cut (rendered/aged by drawBoreCuts): the planet's sprite is split along the
+// comet's line of travel and the two halves drift apart behind a molten,
+// cooling seam. Purely cosmetic, so it finishes cleanly even after the
+// physics runner restarts at the end of the flight.
+// (ux,uy) is the comet's unit direction — the cut runs along it.
+function boreThroughPlanet(b,ux,uy){
+  const tier=b.tier,x=b.position.x,y=b.position.y,r=b.circleRadius;
+  Composite.remove(engine.world,b);
+  boreCuts.push({tier,x,y,r,ux,uy,age:0,maxAge:42,
+    tumble:0.12+Math.random()*0.16});   // radians each half rotates as it flies off
+  playZap();
+  // White-hot embers spat out along the cut, perpendicular to the seam.
+  const px=-uy,py=ux;
+  for(let i=0;i<10;i++){
+    const along=(Math.random()*2-1)*r, side=Math.random()<0.5?-1:1, sp=1+Math.random()*3;
+    particles.push({
+      x:x+ux*along, y:y+uy*along,
+      vx:px*side*sp+ux*(Math.random()*2-1),
+      vy:py*side*sp+uy*(Math.random()*2-1),
+      r:1+Math.random()*2.2,
+      color:['#ffffff','#ffe38a','#ff9a3c','#ff5a1a'][Math.floor(Math.random()*4)],
+      age:0,maxAge:24+Math.floor(Math.random()*18)});
+  }
 }
 function evolveBody(b){
   const tier=b.tier,x=b.position.x,y=b.position.y,vel={x:b.velocity.x,y:b.velocity.y};
@@ -2129,7 +2223,7 @@ function restoreGame(snap){
   buildArena();
   clearSave();                    // single-use: a restored game can't be resumed twice
 
-  popRings=[];particles=[];labels=[];
+  popRings=[];particles=[];labels=[];boreCuts=[];
   score=snap.score;updateScore();
   dangerTimer=0;dangerBonus=0;lastFrameTs=0;   // fresh danger count — don't resume into an instant game-over
   sweepCd=snap.cds.sweep;destroyCd=snap.cds.destroy;upgradeCd=snap.cds.upgrade;
