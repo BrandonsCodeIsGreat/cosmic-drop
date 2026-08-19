@@ -2,17 +2,23 @@
 
 A single self-contained HTML game (Matter.js physics + Firebase leaderboard). No build step.
 
-## ⛔ CRITICAL RULE — DO NOT READ THE AUDIO DATA
-Files before v11 end with two huge base64 WAV blobs (`DROP_B64`, `MERGE_B64`) under the
-`// ── AUDIO DATA ──` marker comment. These consume enormous token budgets and
-**never need to be read or edited.**
+## ⛔ CRITICAL RULE — DO NOT READ THE AUDIO DATA (old archive files only)
+**Applies only to `archive/Cosmic_Drop_vN.html` where N ≤ 10.** Those files end with two
+huge base64 WAV blobs (`DROP_B64`, `MERGE_B64`) under the `// ── AUDIO DATA ──` marker
+comment. They consume enormous token budgets and **never need to be read or edited.**
 
 - **Never** read past the `AUDIO DATA  (huge base64 — do NOT read or edit)` marker.
-- When reading the file, cap your range at that marker line (use `grep -n "AUDIO DATA"`
+- When reading such a file, cap your range at that marker line (use `grep -n "AUDIO DATA"`
   to find it, then read only up to it).
 - When grepping, the blobs are single massive lines — avoid commands that print them.
+  To test whether a file has them at all, use `grep -c` (count only), never `grep -n`.
 
 All editable logic lives **above** that marker.
+
+**Everything from v11 on is exempt** — `index.html`, `test/index.html`, and every
+`archive/Cosmic_Drop_vN.html` with N ≥ 11. v11 replaced the inline blobs with `fetch()`
+from `sounds/*.mp3`, so there is no base64 in those files and they are safe to read in
+full. (v10 is the last version that carries the blobs; v11 is already clean.)
 
 ## File, Versioning & Hosting
 - `index.html` — the canonical game file (branded "Galaxy Edition"). Always a copy of the latest archive version.
