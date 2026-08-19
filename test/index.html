@@ -525,10 +525,8 @@ html,body{height:100%;overflow:hidden;background:var(--bg);font-family:'Fredoka'
 const {Engine,Runner,Bodies,Composite,Events,Body}=Matter;
 // ============================================================
 //  ⚠ TEST BUILD — lives at test/index.html, served at /test/.
-//  Differences from the prod index.html:
-//   • COMET reworked: drag a line → comet crosses the whole screen
-//     along it, zapping every planet it touches. Physics is PAUSED
-//     (Runner stopped) for the duration of the flight.
+//  The line-sweep COMET that debuted here shipped to prod in v23, so
+//  gameplay currently matches prod. Remaining differences:
 //   • localStorage keys carry a '_test' suffix and the Firebase
 //     leaderboard reads/writes 'scores_test/' — the test zone shares
 //     an origin with prod on GitHub Pages, so this keeps test scores
