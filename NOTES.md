@@ -19,19 +19,21 @@ old ones. If we want a clean, fair competitive slate:
 **Decision pending:** do this now, or wait until more people have played the
 fixed field? Holding off for now per Brandon (2026-06-08).
 
-## COMET rework vs. the existing boards (raised v23, undecided)
+## COMET rework vs. the existing boards (v23) — DECIDED, no reset
 
 v23 replaced the slingshot COMET with the full-screen line-sweep: one charge now
 clears every planet along a player-drawn line, where before it was a single
 physical ball. In `competition` mode that charge comes from the same pool of
 `COMPETITION_USES = 5`, so the powerup's value per charge changed materially.
+That makes v23 scores and v22-and-earlier scores not strictly comparable.
 
-Scores set on v23 and scores set on v22-and-earlier are therefore not strictly
-comparable, but they currently share the same `_v4` boards. This is the same
-class of problem as the fixed-playfield issue above, and points at the same fix
-(a `_v4` → `_v5` bump). Worth deciding alongside it rather than separately.
+**Decided (2026-08-19, per Brandon): v23 scores share the existing `_v4` boards.**
+No key bump for the COMET change — the live board carries straight over. This is
+the current behaviour, so nothing in the code needed changing; v23 reads and
+writes `scores/{size}/{pushId}` exactly as v22 did.
 
-**Decision pending** — no reset done for this.
+Note this decision covers the COMET rework only. The fixed-playfield question
+above is still open and untouched.
 
 ## Other open question
 
